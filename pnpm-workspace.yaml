@@ -2,4 +2,7 @@ packages:
   - "backend"
   - "dashboard"
 allowBuilds:
+  '@prisma/engines': true
+  bcrypt: true
+  prisma: true
   unrs-resolver: true

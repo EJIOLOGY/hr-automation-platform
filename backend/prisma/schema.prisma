@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  BUTTON
+  LIST
+  INTERACTIVE
+  SYSTEM
+}
+
+enum EscalationStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Employee {
+  id               String           @id @default(uuid())
+
+  employeeNumber   String           @unique
+  fullName         String
+  phoneNumber      String           @unique
+  department       String
+  jobTitle         String
+
+  status           EmployeeStatus   @default(ACTIVE)
+
+  sessions         ChatSession[]
+  escalations      Escalation[]
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([employeeNumber])
+  @@index([phoneNumber])
+}
+
+model ChatSession {
+
+  id               String           @id @default(uuid())
+
+  employeeId       String
+  employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  currentState     String
+
+  isActive         Boolean          @default(true)
+
+  startedAt        DateTime         @default(now())
+  lastActivityAt   DateTime         @default(now())
+  endedAt          DateTime?
+
+  messages         ChatMessage[]
+  escalations      Escalation[]
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([employeeId])
+  @@index([isActive])
+  @@index([lastActivityAt])
+}
+
+model ChatMessage {
+
+  id               String            @id @default(uuid())
+
+  sessionId        String
+  session          ChatSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  direction        MessageDirection
+
+  messageType      MessageType
+
+  content          String
+
+  metaMessageId    String?           @unique
+
+  rawPayload       Json?
+
+  createdAt        DateTime          @default(now())
+
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+model Escalation {
+  id          String             @id @default(uuid())
+
+  employeeId  String
+  employee    Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  sessionId   String
+  session     ChatSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  reason      String
+
+  status      EscalationStatus   @default(OPEN)
+
+  createdAt   DateTime           @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status])
+  @@index([employeeId])
+}
