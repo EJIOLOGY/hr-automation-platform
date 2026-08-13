@@ -12,6 +12,7 @@ import { EscalationModule } from './modules/escalation/escalation.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { PrismaModule } from './core/prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ConfigModule } from '@nestjs/config';
     EscalationModule,
     AuditModule,
     PrismaModule,
+    HealthModule,
     ConfigModule.forRoot({ isGlobal: true }),
   ],
   controllers: [AppController],
