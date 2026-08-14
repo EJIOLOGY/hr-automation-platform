@@ -3,6 +3,9 @@ import { EmployeeService } from '../employee/employee.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { ChatSessionService } from './chat-session.service';
 import { MessageDirection, MessageType } from '../../generated/prisma/enums';
+import { MENU_IDS, MENU_SELECTION_IDS } from './menu.config';
+import { MenuReplyBuilderService } from './menu-reply-builder.service';
+import { EscalationService } from '../escalation/escalation.service';
 
 @Injectable()
 export class ConversationService {
@@ -10,6 +13,8 @@ export class ConversationService {
     private readonly employeeService: EmployeeService,
     private readonly prisma: PrismaService,
     private readonly chatSessionService: ChatSessionService,
+    private readonly menuReplyBuilder: MenuReplyBuilderService,
+    private readonly escalationService: EscalationService,
   ) {}
 
   /**
@@ -18,10 +23,10 @@ export class ConversationService {
    * MVP rules:
    * - Employee is identified by registered phone number.
    * - Conversation state is persisted in ChatSession.
-   * - User input is treated as a menu selection, not natural language intent.
+   * - User input is treated as a deterministic menu selection.
    * - Every inbound message is logged.
-   * - Every state transition is persisted.
-   * - Unknown input is escalated rather than interpreted.
+   * - Session state is persisted through ChatSessionService.
+   * - Human escalation is handled through EscalationService.
    */
   async handleMessage(phoneNumber: string, message: string) {
     const employee = await this.employeeService.findByPhoneNumber(phoneNumber);
@@ -34,7 +39,8 @@ export class ConversationService {
     }
 
     /**
-     * Only active employees should be allowed to use the HR assistant.
+     * Only active employees should be allowed to use
+     * the HR assistant.
      */
     if (employee.status !== 'ACTIVE') {
       return {
@@ -44,8 +50,8 @@ export class ConversationService {
     }
 
     /**
-     * Get the employee's active conversation session,
-     * or create one starting at the main menu.
+     * Get the employee's active session or create one
+     * starting from the main menu.
      */
     const session = await this.chatSessionService.getOrCreateSession(
       employee.id,
@@ -54,9 +60,6 @@ export class ConversationService {
 
     /**
      * Log every inbound message.
-     *
-     * We intentionally keep the message content because ChatMessage.content
-     * is the source-of-record for the MVP conversation history.
      */
     await this.prisma.chatMessage.create({
       data: {
@@ -70,12 +73,13 @@ export class ConversationService {
     const selection = message.trim().toLowerCase();
 
     /**
-     * Global navigation / escalation options.
-     *
-     * These IDs are intended to correspond to WhatsApp button/list
-     * reply IDs rather than arbitrary natural-language messages.
+     * Talk to HR is a global action and can be selected
+     * from the main menu regardless of the current state.
      */
-    if (this.isTalkToHr(selection)) {
+    if (
+      selection === MENU_SELECTION_IDS.TALK_TO_HR ||
+      this.isTalkToHrAlias(selection)
+    ) {
       return this.escalateToHr(
         employee.id,
         session.id,
@@ -84,14 +88,20 @@ export class ConversationService {
       );
     }
 
+    /**
+     * Global main-menu navigation.
+     *
+     * This remains available while the employee is waiting
+     * in the HR queue.
+     */
     if (this.isMainMenu(selection)) {
       await this.chatSessionService.updateState(session.id, 'MAIN_MENU');
 
-      return this.createResponse(session.id, 'MAIN_MENU', 'main_menu');
+      return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
     }
 
     /**
-     * Deterministic state machine.
+     * Deterministic conversation state machine.
      */
     switch (session.currentState) {
       case 'MAIN_MENU':
@@ -109,11 +119,15 @@ export class ConversationService {
       case 'VERIFICATION_MENU':
         return this.handleVerificationSelection(session.id, selection);
 
+      case 'HR_QUEUE':
+        return this.handleHrQueueState(
+          employee.id,
+          session.id,
+          session.currentState,
+          selection,
+        );
+
       default:
-        /**
-         * Unknown state is a system-level failure rather than something
-         * that should be guessed around.
-         */
         return this.escalateToHr(
           employee.id,
           session.id,
@@ -124,35 +138,41 @@ export class ConversationService {
   }
 
   /**
-   * MAIN MENU
+   * Handles selections from the main menu.
    *
-   * The actual WhatsApp UI should send stable IDs such as:
-   * policy
-   * leave
-   * benefits
-   * verification
-   * talk_to_hr
+   * MenuReplyBuilderService validates the selection against
+   * MENU_CONFIG so the conversation engine does not duplicate
+   * menu configuration.
    */
   private async handleMainMenuSelection(sessionId: string, selection: string) {
-    switch (selection) {
-      case 'policy':
+    const menuSelection = this.menuReplyBuilder.getSelection(
+      MENU_IDS.MAIN,
+      selection,
+    );
+
+    if (!menuSelection) {
+      return this.handleUnknownSelection(sessionId, 'MAIN_MENU', MENU_IDS.MAIN);
+    }
+
+    switch (menuSelection.action) {
+      case 'open_policy_faq':
         return this.transitionAndRespond(
           sessionId,
           'POLICY_MENU',
           'policy_menu',
         );
 
-      case 'leave':
+      case 'open_leave_balance':
         return this.transitionAndRespond(sessionId, 'LEAVE_MENU', 'leave_menu');
 
-      case 'benefits':
+      case 'open_benefits':
         return this.transitionAndRespond(
           sessionId,
           'BENEFITS_MENU',
           'benefits_menu',
         );
 
-      case 'verification':
+      case 'open_employment_verification':
         return this.transitionAndRespond(
           sessionId,
           'VERIFICATION_MENU',
@@ -160,50 +180,36 @@ export class ConversationService {
         );
 
       default:
-        return this.handleUnknownSelection(sessionId, 'MAIN_MENU');
+        return this.handleUnknownSelection(
+          sessionId,
+          'MAIN_MENU',
+          MENU_IDS.MAIN,
+        );
     }
   }
 
   /**
-   * POLICY FAQ MENU
+   * Policy FAQ state.
    *
-   * The actual policy options/content should eventually come from
-   * the externalized HR content configuration rather than being
-   * hardcoded inside this service.
+   * Actual policy content will be connected through the
+   * Policy module in its own integration step.
    */
   private async handlePolicySelection(sessionId: string, selection: string) {
     switch (selection) {
-      /*
-       * Add approved policy IDs here when the policy content
-       * configuration is wired.
-       *
-       * Example:
-       *
-       * case 'leave_policy':
-       *   return this.respondWithContent(...);
-       */
-
       default:
         return this.handleUnknownSelection(sessionId, 'POLICY_MENU');
     }
   }
 
   /**
-   * LEAVE MENU
+   * Leave state.
    *
-   * Leave balance lookup is deliberately kept outside this
-   * conversation service. The leave data adapter/service should
-   * own the spreadsheet lookup.
+   * The actual LeaveService integration will be connected
+   * separately.
    */
   private async handleLeaveSelection(sessionId: string, selection: string) {
     switch (selection) {
-      case 'leave_balance':
-        /**
-         * The LeaveService should be connected here once its
-         * public lookup contract is confirmed.
-         *
-         * We deliberately do not invent a LeaveService API here.
-         */
+      case MENU_SELECTION_IDS.LEAVE_BALANCE:
         return this.createResponse(sessionId, 'LEAVE_MENU', 'leave_balance');
 
       default:
@@ -212,10 +218,7 @@ export class ConversationService {
   }
 
   /**
-   * BENEFITS MENU
-   *
-   * Benefits answers should come from the externalized HR
-   * content layer.
+   * Benefits state.
    */
   private async handleBenefitsSelection(sessionId: string, selection: string) {
     switch (selection) {
@@ -225,7 +228,7 @@ export class ConversationService {
   }
 
   /**
-   * EMPLOYMENT VERIFICATION MENU
+   * Employment verification state.
    */
   private async handleVerificationSelection(
     sessionId: string,
@@ -245,19 +248,57 @@ export class ConversationService {
   }
 
   /**
-   * Handles unrecognized input.
+   * Handles an employee who is currently waiting for HR.
    *
-   * The MVP requirement is explicit:
-   * unrecognized free text must NOT be interpreted as intent.
-   * It should fall back to the current menu / escalation path.
+   * The employee can continue using the bot by typing "menu".
+   * Their existing escalation remains active in the background.
+   */
+  private async handleHrQueueState(
+    employeeId: string,
+    sessionId: string,
+    currentState: string,
+    selection: string,
+  ) {
+    /**
+     * "menu" is handled globally before this method.
+     * If the employee sends another unsupported message while
+     * waiting, we simply remind them that their HR request
+     * remains in the queue.
+     */
+    if (selection === MENU_SELECTION_IDS.TALK_TO_HR) {
+      return this.escalateToHr(
+        employeeId,
+        sessionId,
+        currentState,
+        'Employee checked the HR queue.',
+      );
+    }
+
+    return {
+      success: true,
+      sessionId,
+      state: 'HR_QUEUE',
+      action: 'hr_queue',
+      message:
+        'Your request is still in the HR queue. Type "menu" to continue using the HR assistant.',
+      escalationAvailable: true,
+    };
+  }
+
+  /**
+   * Handles an unrecognized deterministic selection.
+   *
+   * The system does not attempt to interpret arbitrary text
+   * as natural-language intent.
    */
   private async handleUnknownSelection(
     sessionId: string,
     currentState: string,
+    menuId?: string,
   ) {
     await this.chatSessionService.touch(sessionId);
 
-    return {
+    const response = {
       success: true,
       sessionId,
       state: currentState,
@@ -266,10 +307,23 @@ export class ConversationService {
         'I could not match that selection. Please choose one of the available options.',
       escalationAvailable: true,
     };
+
+    if (menuId) {
+      const menu = this.menuReplyBuilder.buildMenuReply(menuId);
+
+      if (menu) {
+        return {
+          ...response,
+          menu,
+        };
+      }
+    }
+
+    return response;
   }
 
   /**
-   * Persists a state transition and returns the next action.
+   * Persists a conversation state transition.
    */
   private async transitionAndRespond(
     sessionId: string,
@@ -287,13 +341,6 @@ export class ConversationService {
 
     await this.chatSessionService.updateState(sessionId, nextState);
 
-    /**
-     * State transitions are required audit events for the MVP.
-     *
-     * We store the transition in the ChatMessage table as SYSTEM
-     * because the current schema does not contain a dedicated
-     * StateTransition table.
-     */
     await this.prisma.chatMessage.create({
       data: {
         sessionId,
@@ -307,10 +354,32 @@ export class ConversationService {
   }
 
   /**
-   * Creates the orchestration response.
-   *
-   * The WhatsApp adapter/controller can later translate the action
-   * into the appropriate List Message or Reply Button payload.
+   * Builds a transport-neutral menu response.
+   */
+  private createMenuResponse(sessionId: string, menuId: string, state: string) {
+    const menu = this.menuReplyBuilder.buildMenuReply(menuId);
+
+    if (!menu) {
+      return {
+        success: false,
+        sessionId,
+        state,
+        message: 'Menu configuration could not be loaded.',
+      };
+    }
+
+    return {
+      success: true,
+      sessionId,
+      state,
+      action: 'main_menu',
+      menu,
+      escalationAvailable: true,
+    };
+  }
+
+  /**
+   * Creates a standard conversation response.
    */
   private createResponse(sessionId: string, state: string, action: string) {
     return {
@@ -323,7 +392,8 @@ export class ConversationService {
   }
 
   /**
-   * Rule-based HR escalation.
+   * Creates or reuses the employee's active escalation
+   * and returns the current HR queue position.
    */
   private async escalateToHr(
     employeeId: string,
@@ -331,46 +401,94 @@ export class ConversationService {
     currentState: string,
     reason: string,
   ) {
-    const escalation = await this.prisma.escalation.create({
-      data: {
+    const queueStatus =
+      await this.escalationService.createOrGetActiveEscalation(
         employeeId,
         sessionId,
         reason,
-      },
-    });
+      );
 
-    await this.chatSessionService.updateState(sessionId, 'ESCALATED');
+    await this.chatSessionService.updateState(sessionId, 'HR_QUEUE');
 
-    /**
-     * Log escalation as a system event.
-     */
     await this.prisma.chatMessage.create({
       data: {
         sessionId,
         direction: MessageDirection.OUTBOUND,
         messageType: MessageType.SYSTEM,
-        content: `ESCALATION:${reason}`,
+        content: `ESCALATION:${reason}:QUEUE_POSITION:${queueStatus.queuePosition ?? 'IN_PROGRESS'}`,
       },
     });
 
+    /**
+     * This means the employee's escalation has already
+     * been picked up by HR.
+     */
+    if (queueStatus.status === 'IN_PROGRESS') {
+      return {
+        success: true,
+        escalated: true,
+        escalationId: queueStatus.escalationId,
+        sessionId,
+        previousState: currentState,
+        state: 'HR_QUEUE',
+        action: 'talk_to_hr',
+        status: 'IN_PROGRESS',
+        message: 'An HR representative is currently attending to your request.',
+      };
+    }
+
+    const queuePosition = queueStatus.queuePosition ?? 1;
+
+    /**
+     * There is currently an HR request being handled.
+     */
+    if (queueStatus.hrBusy) {
+      return {
+        success: true,
+        escalated: true,
+        escalationId: queueStatus.escalationId,
+        sessionId,
+        previousState: currentState,
+        state: 'HR_QUEUE',
+        action: 'talk_to_hr',
+        status: 'OPEN',
+        queuePosition,
+        hrBusy: true,
+        message: `HR is currently assisting another employee. You are number ${queuePosition} in the queue. We will attend to you as soon as an HR representative becomes available.`,
+      };
+    }
+
+    /**
+     * No HR request is currently IN_PROGRESS.
+     */
     return {
       success: true,
       escalated: true,
-      escalationId: escalation.id,
+      escalationId: queueStatus.escalationId,
       sessionId,
       previousState: currentState,
-      state: 'ESCALATED',
+      state: 'HR_QUEUE',
       action: 'talk_to_hr',
-      message:
-        'Your request has been referred to HR. An HR representative will assist you.',
+      status: 'OPEN',
+      queuePosition,
+      hrBusy: false,
+      message: `Your request has been added to the HR queue. You are number ${queuePosition} in the queue. An HR representative will attend to you shortly.`,
     };
   }
 
-  private isTalkToHr(selection: string): boolean {
-    return ['talk_to_hr', 'talk-to-hr', 'hr', 'escalate'].includes(selection);
+  /**
+   * Backward-compatible aliases for Talk to HR.
+   *
+   * The configured menu ID remains the canonical value.
+   */
+  private isTalkToHrAlias(selection: string): boolean {
+    return ['talk-to-hr', 'hr', 'escalate'].includes(selection);
   }
 
+  /**
+   * Global main-menu navigation.
+   */
   private isMainMenu(selection: string): boolean {
-    return ['main_menu', 'main-menu', 'menu'].includes(selection);
+    return ['main-menu', 'menu'].includes(selection);
   }
 }
