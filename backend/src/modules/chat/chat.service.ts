@@ -487,7 +487,7 @@ export class ConversationService {
       success: true,
       sessionId,
       state,
-      action: 'main_menu',
+      action: menuId,
       menu,
       replies: [menu],
       escalationAvailable: true,
