@@ -98,6 +98,30 @@ export class ConversationService {
      * changing the conversation state.
      */
     if (this.isBack(selection)) {
+      const parentMenuId = this.getParentMenuId(session.currentState);
+
+      if (parentMenuId === MENU_IDS.MAIN) {
+        if (session.currentState !== 'MAIN_MENU') {
+          await this.chatSessionService.updateState(session.id, 'MAIN_MENU');
+        }
+
+        return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
+      }
+
+      if (parentMenuId) {
+        const parentState = this.getMenuState(parentMenuId);
+
+        if (parentState && session.currentState !== parentState) {
+          await this.chatSessionService.updateState(session.id, parentState);
+        }
+
+        return this.createMenuResponse(
+          session.id,
+          parentMenuId,
+          parentState ?? session.currentState,
+        );
+      }
+
       if (session.currentState !== 'MAIN_MENU') {
         await this.chatSessionService.updateState(session.id, 'MAIN_MENU');
       }
@@ -681,6 +705,47 @@ export class ConversationService {
    */
   private isBack(selection: string): boolean {
     return selection === 'back';
+  }
+
+  /**
+   * Returns the parent menu for a conversation state.
+   *
+   * Current MVP menu hierarchy is one level deep, so all configured
+   * submenus return to the main menu.
+   */
+  private getParentMenuId(state: string): string | undefined {
+    switch (state) {
+      case 'POLICY_MENU':
+        return MENU_IDS.MAIN;
+      case 'LEAVE_MENU':
+        return MENU_IDS.MAIN;
+      case 'BENEFITS_MENU':
+        return MENU_IDS.MAIN;
+      case 'VERIFICATION_MENU':
+        return MENU_IDS.MAIN;
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Resolves a configured menu ID to its conversation state.
+   */
+  private getMenuState(menuId: string): string | undefined {
+    switch (menuId) {
+      case MENU_IDS.MAIN:
+        return 'MAIN_MENU';
+      case MENU_IDS.POLICY:
+        return 'POLICY_MENU';
+      case MENU_IDS.LEAVE:
+        return 'LEAVE_MENU';
+      case MENU_IDS.BENEFITS:
+        return 'BENEFITS_MENU';
+      case MENU_IDS.VERIFICATION:
+        return 'VERIFICATION_MENU';
+      default:
+        return undefined;
+    }
   }
 
   /**
