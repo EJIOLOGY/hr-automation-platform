@@ -10,7 +10,6 @@ import type {
   ConversationResponse,
   InboundConversationMessage,
 } from './conversation.contracts';
-import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 
 @Injectable()
 export class ConversationService {
@@ -36,9 +35,7 @@ export class ConversationService {
   async handleMessage(
     inboundMessage: InboundConversationMessage,
   ): Promise<ConversationResponse> {
-    const phoneNumber = PhoneNumberNormalizer.normalize(
-      inboundMessage.senderPhoneNumber,
-    );
+    const phoneNumber = inboundMessage.senderPhoneNumber;
     const message = inboundMessage.input.value;
     const employee = await this.employeeService.findByPhoneNumber(phoneNumber);
 
@@ -84,11 +81,29 @@ export class ConversationService {
         sessionId: session.id,
         direction: MessageDirection.INBOUND,
         messageType: MessageType.TEXT,
-      content: message,
+        content: message,
       },
     });
 
     const selection = message.trim().toLowerCase();
+
+    /**
+     * Global "back" navigation.
+     *
+     * The MVP does not maintain a navigation stack. "back"
+     * therefore returns the employee to the main menu from
+     * any non-main conversation state.
+     *
+     * The active HR escalation, if any, is not resolved by
+     * changing the conversation state.
+     */
+    if (this.isBack(selection)) {
+      if (session.currentState !== 'MAIN_MENU') {
+        await this.chatSessionService.updateState(session.id, 'MAIN_MENU');
+      }
+
+      return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
+    }
 
     /**
      * Talk to HR is a global action and can be selected
@@ -177,27 +192,31 @@ export class ConversationService {
 
     switch (menuSelection.action) {
       case 'open_policy_faq':
-        return this.transitionAndRespond(
+        return this.transitionAndMenuResponse(
           sessionId,
           'POLICY_MENU',
-          'policy_menu',
+          MENU_IDS.POLICY,
         );
 
       case 'open_leave_balance':
-        return this.transitionAndRespond(sessionId, 'LEAVE_MENU', 'leave_menu');
+        return this.transitionAndMenuResponse(
+          sessionId,
+          'LEAVE_MENU',
+          MENU_IDS.LEAVE,
+        );
 
       case 'open_benefits':
-        return this.transitionAndRespond(
+        return this.transitionAndMenuResponse(
           sessionId,
           'BENEFITS_MENU',
-          'benefits_menu',
+          MENU_IDS.BENEFITS,
         );
 
       case 'open_employment_verification':
-        return this.transitionAndRespond(
+        return this.transitionAndMenuResponse(
           sessionId,
           'VERIFICATION_MENU',
-          'verification_menu',
+          MENU_IDS.VERIFICATION,
         );
 
       default:
@@ -219,10 +238,20 @@ export class ConversationService {
     sessionId: string,
     selection: string,
   ): Promise<ConversationResponse> {
-    switch (selection) {
-      default:
-        return this.handleUnknownSelection(sessionId, 'POLICY_MENU');
+    const menuSelection = this.menuReplyBuilder.getSelection(
+      MENU_IDS.POLICY,
+      selection,
+    );
+
+    if (!menuSelection) {
+      return this.handleUnknownSelection(
+        sessionId,
+        'POLICY_MENU',
+        MENU_IDS.POLICY,
+      );
     }
+
+    return this.createResponse(sessionId, 'POLICY_MENU', menuSelection.action);
   }
 
   /**
@@ -235,13 +264,20 @@ export class ConversationService {
     sessionId: string,
     selection: string,
   ): Promise<ConversationResponse> {
-    switch (selection) {
-      case MENU_SELECTION_IDS.LEAVE_BALANCE:
-        return this.createResponse(sessionId, 'LEAVE_MENU', 'leave_balance');
+    const menuSelection = this.menuReplyBuilder.getSelection(
+      MENU_IDS.LEAVE,
+      selection,
+    );
 
-      default:
-        return this.handleUnknownSelection(sessionId, 'LEAVE_MENU');
+    if (!menuSelection) {
+      return this.handleUnknownSelection(
+        sessionId,
+        'LEAVE_MENU',
+        MENU_IDS.LEAVE,
+      );
     }
+
+    return this.createResponse(sessionId, 'LEAVE_MENU', menuSelection.action);
   }
 
   /**
@@ -251,10 +287,24 @@ export class ConversationService {
     sessionId: string,
     selection: string,
   ): Promise<ConversationResponse> {
-    switch (selection) {
-      default:
-        return this.handleUnknownSelection(sessionId, 'BENEFITS_MENU');
+    const menuSelection = this.menuReplyBuilder.getSelection(
+      MENU_IDS.BENEFITS,
+      selection,
+    );
+
+    if (!menuSelection) {
+      return this.handleUnknownSelection(
+        sessionId,
+        'BENEFITS_MENU',
+        MENU_IDS.BENEFITS,
+      );
     }
+
+    return this.createResponse(
+      sessionId,
+      'BENEFITS_MENU',
+      menuSelection.action,
+    );
   }
 
   /**
@@ -264,17 +314,32 @@ export class ConversationService {
     sessionId: string,
     selection: string,
   ): Promise<ConversationResponse> {
-    switch (selection) {
-      case 'request_verification':
-        return this.transitionAndRespond(
-          sessionId,
-          'VERIFICATION_CONFIRM',
-          'verification_request',
-        );
+    const menuSelection = this.menuReplyBuilder.getSelection(
+      MENU_IDS.VERIFICATION,
+      selection,
+    );
 
-      default:
-        return this.handleUnknownSelection(sessionId, 'VERIFICATION_MENU');
+    if (!menuSelection) {
+      return this.handleUnknownSelection(
+        sessionId,
+        'VERIFICATION_MENU',
+        MENU_IDS.VERIFICATION,
+      );
     }
+
+    if (menuSelection.action === 'request_verification') {
+      return this.transitionAndRespond(
+        sessionId,
+        'VERIFICATION_CONFIRM',
+        'verification_request',
+      );
+    }
+
+    return this.createResponse(
+      sessionId,
+      'VERIFICATION_MENU',
+      menuSelection.action,
+    );
   }
 
   /**
@@ -430,6 +495,39 @@ export class ConversationService {
   }
 
   /**
+   * Persists a state transition and returns the target menu.
+   *
+   * This is used when a main-menu selection opens a submenu.
+   */
+  private async transitionAndMenuResponse(
+    sessionId: string,
+    nextState: string,
+    menuId: string,
+  ): Promise<ConversationResponse> {
+    const previousSession = await this.prisma.chatSession.findUnique({
+      where: {
+        id: sessionId,
+      },
+      select: {
+        currentState: true,
+      },
+    });
+
+    await this.chatSessionService.updateState(sessionId, nextState);
+
+    await this.prisma.chatMessage.create({
+      data: {
+        sessionId,
+        direction: MessageDirection.OUTBOUND,
+        messageType: MessageType.SYSTEM,
+        content: `STATE_TRANSITION:${previousSession?.currentState ?? 'UNKNOWN'}->${nextState}`,
+      },
+    });
+
+    return this.createMenuResponse(sessionId, menuId, nextState);
+  }
+
+  /**
    * Creates a standard conversation response.
    */
   private createResponse(
@@ -489,6 +587,10 @@ export class ConversationService {
         success: true,
         escalated: true,
         escalationId: queueStatus.escalationId,
+        escalation: {
+          id: queueStatus.escalationId,
+          status: 'IN_PROGRESS',
+        },
         sessionId,
         previousState: currentState,
         state: 'HR_QUEUE',
@@ -514,6 +616,11 @@ export class ConversationService {
         success: true,
         escalated: true,
         escalationId: queueStatus.escalationId,
+        escalation: {
+          id: queueStatus.escalationId,
+          status: 'OPEN',
+          queuePosition,
+        },
         sessionId,
         previousState: currentState,
         state: 'HR_QUEUE',
@@ -538,6 +645,11 @@ export class ConversationService {
       success: true,
       escalated: true,
       escalationId: queueStatus.escalationId,
+      escalation: {
+        id: queueStatus.escalationId,
+        status: 'OPEN',
+        queuePosition,
+      },
       sessionId,
       previousState: currentState,
       state: 'HR_QUEUE',
@@ -562,6 +674,13 @@ export class ConversationService {
    */
   private isTalkToHrAlias(selection: string): boolean {
     return ['talk-to-hr', 'hr', 'escalate'].includes(selection);
+  }
+
+  /**
+   * Deterministic back navigation.
+   */
+  private isBack(selection: string): boolean {
+    return selection === 'back';
   }
 
   /**

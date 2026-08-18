@@ -34,6 +34,12 @@ export interface MenuConversationReply {
 
 export type ConversationReply = TextConversationReply | MenuConversationReply;
 
+export interface ConversationEscalation {
+  id: string;
+  status: 'OPEN' | 'IN_PROGRESS';
+  queuePosition?: number;
+}
+
 /** Transport-neutral result returned by the conversation application service. */
 export interface ConversationResponse {
   success: boolean;
@@ -43,6 +49,7 @@ export interface ConversationResponse {
   sessionId?: string;
   state?: string;
   action?: string;
+  escalation?: ConversationEscalation;
   escalationAvailable?: boolean;
   escalated?: boolean;
   escalationId?: string;

@@ -35,14 +35,16 @@ describe('MenuReplyBuilderService', () => {
     }
   });
 
-  it('uses unique menu and selection IDs', () => {
+  it('uses unique menu IDs and unique selection IDs within each menu', () => {
     const menuIds = MENU_CONFIG.map((menu) => menu.id);
-    const selectionIds = MENU_CONFIG.flatMap((menu) =>
-      menu.options.map((option) => option.id),
-    );
 
     expect(new Set(menuIds).size).toBe(menuIds.length);
-    expect(new Set(selectionIds).size).toBe(selectionIds.length);
+
+    for (const menu of MENU_CONFIG) {
+      const selectionIds = menu.options.map((option) => option.id);
+
+      expect(new Set(selectionIds).size).toBe(selectionIds.length);
+    }
   });
 
   it('does not create a route for an invalid selection', () => {

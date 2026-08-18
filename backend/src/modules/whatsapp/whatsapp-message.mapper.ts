@@ -3,6 +3,7 @@ import type {
   ConversationReply,
   InboundConversationMessage,
 } from '../chat/conversation.contracts';
+import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 
 export type WhatsappInboundMessage =
   | {
@@ -48,7 +49,7 @@ export type WhatsappOutboundMessage =
 export class WhatsappMessageMapper {
   toInbound(message: WhatsappInboundMessage): InboundConversationMessage {
     const base = {
-      senderPhoneNumber: message.from,
+      senderPhoneNumber: PhoneNumberNormalizer.normalize(message.from),
       externalMessageId: message.id,
       receivedAt: message.timestamp,
     };
@@ -64,7 +65,8 @@ export class WhatsappMessageMapper {
       ...base,
       input: {
         kind: 'selection',
-        value: message.type === 'button' ? message.button.payload : message.list.id,
+        value:
+          message.type === 'button' ? message.button.payload : message.list.id,
       },
     };
   }

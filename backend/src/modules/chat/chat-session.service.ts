@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
 
+const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class ChatSessionService {
   constructor(private readonly prisma: PrismaService) {}
@@ -17,33 +19,25 @@ export class ChatSessionService {
     });
 
     if (existingSession) {
-      const sessionAge = Date.now() - existingSession.lastActivityAt.getTime();
+      const inactivityDuration =
+        Date.now() - existingSession.lastActivityAt.getTime();
 
-      const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-
-      /**
-       * Close sessions that have been inactive for 24 hours
-       * or longer.
-       */
-      if (sessionAge >= SESSION_TIMEOUT_MS) {
-        await this.prisma.chatSession.update({
-          where: {
-            id: existingSession.id,
-          },
-          data: {
-            isActive: false,
-            endedAt: new Date(),
-          },
-        });
-      } else {
+      if (inactivityDuration < SESSION_TIMEOUT_MS) {
         return existingSession;
       }
+
+      await this.prisma.chatSession.update({
+        where: {
+          id: existingSession.id,
+        },
+        data: {
+          isActive: false,
+          endedAt: new Date(),
+          lastActivityAt: new Date(),
+        },
+      });
     }
 
-    /**
-     * No active session exists, or the previous session
-     * expired due to inactivity.
-     */
     return this.prisma.chatSession.create({
       data: {
         employeeId,
