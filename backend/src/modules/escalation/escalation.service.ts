@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EscalationStatus } from '../../generated/prisma/enums';
 
@@ -13,26 +13,11 @@ export interface EscalationQueueStatus {
 export class EscalationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Creates an escalation for an employee and returns
-   * the employee's current queue information.
-   *
-   * Rules:
-   * - An employee can only have one active escalation.
-   * - If HR is not currently attending to anyone, the first
-   *   escalation becomes IN_PROGRESS.
-   * - If HR is already attending to someone, new escalations
-   *   remain OPEN and are placed in the queue.
-   */
   async createOrGetActiveEscalation(
     employeeId: string,
     sessionId: string,
     reason: string,
   ): Promise<EscalationQueueStatus> {
-    /**
-     * Check whether this employee already has an active
-     * escalation.
-     */
     const existingEscalation = await this.prisma.escalation.findFirst({
       where: {
         employeeId,
@@ -46,45 +31,10 @@ export class EscalationService {
     });
 
     /**
-     * If an active escalation already exists, reuse it.
-     *
-     * If it is OPEN and nobody is currently IN_PROGRESS,
-     * promote this existing request so the queue does not
-     * get stuck because of an earlier test/request.
+     * Check whether another employee is currently
+     * being attended to by HR.
      */
-    if (existingEscalation) {
-      if (existingEscalation.status === EscalationStatus.OPEN) {
-        const hrInProgress = await this.prisma.escalation.findFirst({
-          where: {
-            status: EscalationStatus.IN_PROGRESS,
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        });
-
-        if (!hrInProgress) {
-          const promotedEscalation = await this.prisma.escalation.update({
-            where: {
-              id: existingEscalation.id,
-            },
-            data: {
-              status: EscalationStatus.IN_PROGRESS,
-            },
-          });
-
-          return this.getQueueStatus(promotedEscalation.id);
-        }
-      }
-
-      return this.getQueueStatus(existingEscalation.id);
-    }
-
-    /**
-     * Check whether HR is currently attending to another
-     * employee.
-     */
-    const hrInProgress = await this.prisma.escalation.findFirst({
+    const activeHrRequest = await this.prisma.escalation.findFirst({
       where: {
         status: EscalationStatus.IN_PROGRESS,
       },
@@ -94,11 +44,37 @@ export class EscalationService {
     });
 
     /**
-     * If HR is free, this becomes the active request.
+     * Reuse an existing active escalation.
      *
-     * If HR is already busy, this request joins the queue.
+     * If HR is currently free and this employee's request
+     * is waiting, promote it immediately to IN_PROGRESS.
      */
-    const status = hrInProgress
+    if (existingEscalation) {
+      if (
+        !activeHrRequest &&
+        existingEscalation.status === EscalationStatus.OPEN
+      ) {
+        const promotedEscalation = await this.prisma.escalation.update({
+          where: {
+            id: existingEscalation.id,
+          },
+          data: {
+            status: EscalationStatus.IN_PROGRESS,
+          },
+        });
+
+        return this.getQueueStatus(promotedEscalation.id);
+      }
+
+      return this.getQueueStatus(existingEscalation.id);
+    }
+
+    /**
+     * If HR is free, this request goes directly to HR.
+     *
+     * If HR is busy, this request enters the waiting queue.
+     */
+    const status = activeHrRequest
       ? EscalationStatus.OPEN
       : EscalationStatus.IN_PROGRESS;
 
@@ -114,18 +90,6 @@ export class EscalationService {
     return this.getQueueStatus(escalation.id);
   }
 
-  /**
-   * Returns the current queue status for an escalation.
-   *
-   * IN_PROGRESS:
-   * - HR is currently attending to the employee.
-   * - No queue position is returned.
-   *
-   * OPEN:
-   * - Queue position is calculated dynamically based on
-   *   earlier OPEN requests.
-   * - The IN_PROGRESS request is not counted as a queue position.
-   */
   async getQueueStatus(escalationId: string): Promise<EscalationQueueStatus> {
     const escalation = await this.prisma.escalation.findUnique({
       where: {
@@ -134,12 +98,12 @@ export class EscalationService {
     });
 
     if (!escalation) {
-      throw new Error('Escalation not found.');
+      throw new NotFoundException('Escalation not found.');
     }
 
     /**
-     * Determine whether HR is currently attending to
-     * another escalation.
+     * Check whether HR is currently attending
+     * to an escalation.
      */
     const hrInProgressCount = await this.prisma.escalation.count({
       where: {
@@ -147,8 +111,11 @@ export class EscalationService {
       },
     });
 
+    const hrBusy = hrInProgressCount > 0;
+
     /**
-     * This employee is currently being attended to.
+     * Employee is currently being attended to.
+     * Therefore they are not waiting in the queue.
      */
     if (escalation.status === EscalationStatus.IN_PROGRESS) {
       return {
@@ -160,25 +127,25 @@ export class EscalationService {
     }
 
     /**
-     * For any non-active status, there is no queue position.
+     * Resolved and closed escalations are no longer
+     * part of the active queue.
      */
-    if (escalation.status !== EscalationStatus.OPEN) {
+    if (
+      escalation.status === EscalationStatus.RESOLVED ||
+      escalation.status === EscalationStatus.CLOSED
+    ) {
       return {
         escalationId: escalation.id,
         status: escalation.status,
         queuePosition: null,
-        hrBusy: hrInProgressCount > 0,
+        hrBusy,
       };
     }
 
     /**
-     * Count only OPEN requests created before this request.
+     * OPEN escalation.
      *
-     * Example:
-     *
-     * Employee A -> IN_PROGRESS
-     * Employee B -> OPEN, position 1
-     * Employee C -> OPEN, position 2
+     * Count earlier OPEN requests only.
      */
     const requestsAhead = await this.prisma.escalation.count({
       where: {
@@ -193,7 +160,90 @@ export class EscalationService {
       escalationId: escalation.id,
       status: escalation.status,
       queuePosition: requestsAhead + 1,
-      hrBusy: hrInProgressCount > 0,
+      hrBusy,
     };
+  }
+
+  async startHandling(escalationId: string) {
+    const escalation = await this.prisma.escalation.findUnique({
+      where: {
+        id: escalationId,
+      },
+    });
+
+    if (!escalation) {
+      throw new NotFoundException('Escalation not found.');
+    }
+
+    if (escalation.status !== EscalationStatus.OPEN) {
+      return escalation;
+    }
+
+    /**
+     * Only allow this escalation to become IN_PROGRESS
+     * when no other escalation is currently being handled.
+     */
+    const activeHrRequest = await this.prisma.escalation.findFirst({
+      where: {
+        status: EscalationStatus.IN_PROGRESS,
+      },
+    });
+
+    if (activeHrRequest) {
+      return escalation;
+    }
+
+    return this.prisma.escalation.update({
+      where: {
+        id: escalationId,
+      },
+      data: {
+        status: EscalationStatus.IN_PROGRESS,
+      },
+    });
+  }
+
+  async resolveEscalation(escalationId: string) {
+    const escalation = await this.prisma.escalation.findUnique({
+      where: {
+        id: escalationId,
+      },
+    });
+
+    if (!escalation) {
+      throw new NotFoundException('Escalation not found.');
+    }
+
+    return this.prisma.escalation.update({
+      where: {
+        id: escalationId,
+      },
+      data: {
+        status: EscalationStatus.RESOLVED,
+        resolvedAt: new Date(),
+      },
+    });
+  }
+
+  async closeEscalation(escalationId: string) {
+    const escalation = await this.prisma.escalation.findUnique({
+      where: {
+        id: escalationId,
+      },
+    });
+
+    if (!escalation) {
+      throw new NotFoundException('Escalation not found.');
+    }
+
+    return this.prisma.escalation.update({
+      where: {
+        id: escalationId,
+      },
+      data: {
+        status: EscalationStatus.CLOSED,
+        resolvedAt: escalation.resolvedAt ?? new Date(),
+      },
+    });
   }
 }

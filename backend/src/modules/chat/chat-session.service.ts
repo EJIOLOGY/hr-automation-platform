@@ -17,9 +17,33 @@ export class ChatSessionService {
     });
 
     if (existingSession) {
-      return existingSession;
+      const sessionAge = Date.now() - existingSession.lastActivityAt.getTime();
+
+      const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
+      /**
+       * Close sessions that have been inactive for 24 hours
+       * or longer.
+       */
+      if (sessionAge >= SESSION_TIMEOUT_MS) {
+        await this.prisma.chatSession.update({
+          where: {
+            id: existingSession.id,
+          },
+          data: {
+            isActive: false,
+            endedAt: new Date(),
+          },
+        });
+      } else {
+        return existingSession;
+      }
     }
 
+    /**
+     * No active session exists, or the previous session
+     * expired due to inactivity.
+     */
     return this.prisma.chatSession.create({
       data: {
         employeeId,

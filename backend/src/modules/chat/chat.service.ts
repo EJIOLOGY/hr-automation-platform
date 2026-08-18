@@ -6,6 +6,11 @@ import { MessageDirection, MessageType } from '../../generated/prisma/enums';
 import { MENU_IDS, MENU_SELECTION_IDS } from './menu.config';
 import { MenuReplyBuilderService } from './menu-reply-builder.service';
 import { EscalationService } from '../escalation/escalation.service';
+import type {
+  ConversationResponse,
+  InboundConversationMessage,
+} from './conversation.contracts';
+import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 
 @Injectable()
 export class ConversationService {
@@ -28,13 +33,20 @@ export class ConversationService {
    * - Session state is persisted through ChatSessionService.
    * - Human escalation is handled through EscalationService.
    */
-  async handleMessage(phoneNumber: string, message: string) {
+  async handleMessage(
+    inboundMessage: InboundConversationMessage,
+  ): Promise<ConversationResponse> {
+    const phoneNumber = PhoneNumberNormalizer.normalize(
+      inboundMessage.senderPhoneNumber,
+    );
+    const message = inboundMessage.input.value;
     const employee = await this.employeeService.findByPhoneNumber(phoneNumber);
 
     if (!employee) {
       return {
         success: false,
         message: 'Employee not found.',
+        replies: [{ type: 'text', text: 'Employee not found.' }],
       };
     }
 
@@ -46,6 +58,12 @@ export class ConversationService {
       return {
         success: false,
         message: 'Your employee account is not active. Please contact HR.',
+        replies: [
+          {
+            type: 'text',
+            text: 'Your employee account is not active. Please contact HR.',
+          },
+        ],
       };
     }
 
@@ -66,7 +84,7 @@ export class ConversationService {
         sessionId: session.id,
         direction: MessageDirection.INBOUND,
         messageType: MessageType.TEXT,
-        content: message,
+      content: message,
       },
     });
 
@@ -144,7 +162,10 @@ export class ConversationService {
    * MENU_CONFIG so the conversation engine does not duplicate
    * menu configuration.
    */
-  private async handleMainMenuSelection(sessionId: string, selection: string) {
+  private async handleMainMenuSelection(
+    sessionId: string,
+    selection: string,
+  ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
       MENU_IDS.MAIN,
       selection,
@@ -194,7 +215,10 @@ export class ConversationService {
    * Actual policy content will be connected through the
    * Policy module in its own integration step.
    */
-  private async handlePolicySelection(sessionId: string, selection: string) {
+  private async handlePolicySelection(
+    sessionId: string,
+    selection: string,
+  ): Promise<ConversationResponse> {
     switch (selection) {
       default:
         return this.handleUnknownSelection(sessionId, 'POLICY_MENU');
@@ -207,7 +231,10 @@ export class ConversationService {
    * The actual LeaveService integration will be connected
    * separately.
    */
-  private async handleLeaveSelection(sessionId: string, selection: string) {
+  private async handleLeaveSelection(
+    sessionId: string,
+    selection: string,
+  ): Promise<ConversationResponse> {
     switch (selection) {
       case MENU_SELECTION_IDS.LEAVE_BALANCE:
         return this.createResponse(sessionId, 'LEAVE_MENU', 'leave_balance');
@@ -220,7 +247,10 @@ export class ConversationService {
   /**
    * Benefits state.
    */
-  private async handleBenefitsSelection(sessionId: string, selection: string) {
+  private async handleBenefitsSelection(
+    sessionId: string,
+    selection: string,
+  ): Promise<ConversationResponse> {
     switch (selection) {
       default:
         return this.handleUnknownSelection(sessionId, 'BENEFITS_MENU');
@@ -233,7 +263,7 @@ export class ConversationService {
   private async handleVerificationSelection(
     sessionId: string,
     selection: string,
-  ) {
+  ): Promise<ConversationResponse> {
     switch (selection) {
       case 'request_verification':
         return this.transitionAndRespond(
@@ -258,7 +288,7 @@ export class ConversationService {
     sessionId: string,
     currentState: string,
     selection: string,
-  ) {
+  ): Promise<ConversationResponse> {
     /**
      * "menu" is handled globally before this method.
      * If the employee sends another unsupported message while
@@ -281,6 +311,12 @@ export class ConversationService {
       action: 'hr_queue',
       message:
         'Your request is still in the HR queue. Type "menu" to continue using the HR assistant.',
+      replies: [
+        {
+          type: 'text',
+          text: 'Your request is still in the HR queue. Type "menu" to continue using the HR assistant.',
+        },
+      ],
       escalationAvailable: true,
     };
   }
@@ -295,7 +331,7 @@ export class ConversationService {
     sessionId: string,
     currentState: string,
     menuId?: string,
-  ) {
+  ): Promise<ConversationResponse> {
     await this.chatSessionService.touch(sessionId);
 
     const response = {
@@ -305,6 +341,12 @@ export class ConversationService {
       action: 'fallback',
       message:
         'I could not match that selection. Please choose one of the available options.',
+      replies: [
+        {
+          type: 'text' as const,
+          text: 'I could not match that selection. Please choose one of the available options.',
+        },
+      ],
       escalationAvailable: true,
     };
 
@@ -315,6 +357,7 @@ export class ConversationService {
         return {
           ...response,
           menu,
+          replies: [...response.replies, menu],
         };
       }
     }
@@ -329,7 +372,7 @@ export class ConversationService {
     sessionId: string,
     nextState: string,
     action: string,
-  ) {
+  ): Promise<ConversationResponse> {
     const previousSession = await this.prisma.chatSession.findUnique({
       where: {
         id: sessionId,
@@ -356,7 +399,11 @@ export class ConversationService {
   /**
    * Builds a transport-neutral menu response.
    */
-  private createMenuResponse(sessionId: string, menuId: string, state: string) {
+  private createMenuResponse(
+    sessionId: string,
+    menuId: string,
+    state: string,
+  ): ConversationResponse {
     const menu = this.menuReplyBuilder.buildMenuReply(menuId);
 
     if (!menu) {
@@ -365,6 +412,9 @@ export class ConversationService {
         sessionId,
         state,
         message: 'Menu configuration could not be loaded.',
+        replies: [
+          { type: 'text', text: 'Menu configuration could not be loaded.' },
+        ],
       };
     }
 
@@ -374,6 +424,7 @@ export class ConversationService {
       state,
       action: 'main_menu',
       menu,
+      replies: [menu],
       escalationAvailable: true,
     };
   }
@@ -381,12 +432,22 @@ export class ConversationService {
   /**
    * Creates a standard conversation response.
    */
-  private createResponse(sessionId: string, state: string, action: string) {
+  private createResponse(
+    sessionId: string,
+    state: string,
+    action: string,
+  ): ConversationResponse {
     return {
       success: true,
       sessionId,
       state,
       action,
+      replies: [
+        {
+          type: 'text',
+          text: 'Your selection has been received.',
+        },
+      ],
       escalationAvailable: true,
     };
   }
@@ -400,7 +461,7 @@ export class ConversationService {
     sessionId: string,
     currentState: string,
     reason: string,
-  ) {
+  ): Promise<ConversationResponse> {
     const queueStatus =
       await this.escalationService.createOrGetActiveEscalation(
         employeeId,
@@ -434,6 +495,12 @@ export class ConversationService {
         action: 'talk_to_hr',
         status: 'IN_PROGRESS',
         message: 'An HR representative is currently attending to your request.',
+        replies: [
+          {
+            type: 'text',
+            text: 'An HR representative is currently attending to your request.',
+          },
+        ],
       };
     }
 
@@ -455,6 +522,12 @@ export class ConversationService {
         queuePosition,
         hrBusy: true,
         message: `HR is currently assisting another employee. You are number ${queuePosition} in the queue. We will attend to you as soon as an HR representative becomes available.`,
+        replies: [
+          {
+            type: 'text',
+            text: `HR is currently assisting another employee. You are number ${queuePosition} in the queue. We will attend to you as soon as an HR representative becomes available.`,
+          },
+        ],
       };
     }
 
@@ -473,6 +546,12 @@ export class ConversationService {
       queuePosition,
       hrBusy: false,
       message: `Your request has been added to the HR queue. You are number ${queuePosition} in the queue. An HR representative will attend to you shortly.`,
+      replies: [
+        {
+          type: 'text',
+          text: `Your request has been added to the HR queue. You are number ${queuePosition} in the queue. An HR representative will attend to you shortly.`,
+        },
+      ],
     };
   }
 
