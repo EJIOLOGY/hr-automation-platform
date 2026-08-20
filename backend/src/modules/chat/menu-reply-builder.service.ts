@@ -36,14 +36,41 @@ export class MenuReplyBuilderService {
       menuId: menu.id,
       title: menu.title,
       prompt: menu.prompt,
-      options: menu.options.map(({ id, label }) => ({ id, label })),
+      options: menu.options.map(({ id, label }, index) => ({
+        id,
+        label: `[${index + 1}] ${label}`,
+      })),
     };
   }
 
   getSelection(menuId: string, selectionId: string): MenuSelection | undefined {
     const menu = this.findMenu(menuId);
-    const option = menu?.options.find(
-      (candidate) => candidate.id === selectionId,
+
+    if (!menu) {
+      return undefined;
+    }
+
+    const normalizedSelection = selectionId.trim().toLowerCase();
+
+    /**
+     * Employee-facing menu input is numeric and 1-based.
+     * The configured option ID remains the internal route key.
+     *
+     * Example:
+     *   "2" -> second option in the current menu.
+     *
+     * Internal selection IDs are still accepted so existing
+     * deterministic integrations/tests remain backward compatible.
+     */
+    if (/^\d+$/.test(normalizedSelection)) {
+      const optionIndex = Number(normalizedSelection) - 1;
+      const option = menu.options[optionIndex];
+
+      return option ? this.toSelection(option) : undefined;
+    }
+
+    const option = menu.options.find(
+      (candidate) => candidate.id === normalizedSelection,
     );
 
     return option ? this.toSelection(option) : undefined;

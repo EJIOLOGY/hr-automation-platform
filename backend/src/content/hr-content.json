@@ -1,0 +1,106 @@
+{
+  "policy": {
+    "leave_policy": {
+      "id": "leave_policy",
+      "title": "Leave Policy",
+      "answer": "[HR APPROVAL REQUIRED] Leave policy content has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "working_hours_attendance": {
+      "id": "working_hours_attendance",
+      "title": "Working Hours & Attendance",
+      "answer": "[HR APPROVAL REQUIRED] Working hours and attendance policy content has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "code_of_conduct": {
+      "id": "code_of_conduct",
+      "title": "Code of Conduct",
+      "answer": "[HR APPROVAL REQUIRED] Code of Conduct content has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "hse_workplace_safety": {
+      "id": "hse_workplace_safety",
+      "title": "HSE / Workplace Safety",
+      "answer": "[HR APPROVAL REQUIRED] HSE / Workplace Safety content has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "benefits_policy": {
+      "id": "benefits_policy",
+      "title": "Employee Benefits Policy",
+      "answer": "[HR APPROVAL REQUIRED] Employee Benefits Policy content has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "other_hr_faq": {
+      "id": "other_hr_faq",
+      "title": "Other HR FAQs",
+      "answer": "[HR APPROVAL REQUIRED] Additional HR FAQ content has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "health_insurance": {
+      "id": "health_insurance",
+      "title": "Health Insurance",
+      "answer": "[HR APPROVAL REQUIRED] Health Insurance information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    }
+  },
+  "benefits": {
+    "medical_benefits": {
+      "id": "medical_benefits",
+      "title": "Medical / Health Benefits",
+      "answer": "[HR APPROVAL REQUIRED] Medical / Health Benefits information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "insurance_benefits": {
+      "id": "insurance_benefits",
+      "title": "Insurance",
+      "answer": "[HR APPROVAL REQUIRED] Insurance benefits information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "pension": {
+      "id": "pension",
+      "title": "Pension",
+      "answer": "[HR APPROVAL REQUIRED] Pension information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "other_benefits": {
+      "id": "other_benefits",
+      "title": "Other Benefits",
+      "answer": "[HR APPROVAL REQUIRED] Additional benefits information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    }
+  },
+  "leave": {
+    "leave_types": {
+      "id": "leave_types",
+      "title": "Leave Types",
+      "answer": "[HR APPROVAL REQUIRED] Leave types information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "how_to_apply_leave": {
+      "id": "how_to_apply_leave",
+      "title": "How to Apply for Leave",
+      "answer": "[HR APPROVAL REQUIRED] Leave application procedure has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "leave_application_status": {
+      "id": "leave_application_status",
+      "title": "Leave Application Status",
+      "answer": "[HR APPROVAL REQUIRED] Leave application status information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    }
+  },
+  "verification": {
+    "employment_letter": {
+      "id": "employment_letter",
+      "title": "Employment Letter",
+      "answer": "[HR APPROVAL REQUIRED] Employment Letter information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    },
+    "other_hr_document": {
+      "id": "other_hr_document",
+      "title": "Other HR Document",
+      "answer": "[HR APPROVAL REQUIRED] Other HR Document information has not yet been provided by HR.",
+      "status": "PLACEHOLDER"
+    }
+  }
+}

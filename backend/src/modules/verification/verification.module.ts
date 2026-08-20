@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { VerificationService } from './verification.service';
+import { HrDocumentRequestService } from './hr-document-request.service';
 import { VerificationController } from './verification.controller';
 
 @Module({
-  providers: [VerificationService],
-  controllers: [VerificationController]
+  providers: [HrDocumentRequestService],
+  controllers: [VerificationController],
+  exports: [HrDocumentRequestService],
 })
 export class VerificationModule {}

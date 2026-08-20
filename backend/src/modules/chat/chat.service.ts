@@ -6,6 +6,9 @@ import { MessageDirection, MessageType } from '../../generated/prisma/enums';
 import { MENU_IDS, MENU_SELECTION_IDS } from './menu.config';
 import { MenuReplyBuilderService } from './menu-reply-builder.service';
 import { EscalationService } from '../escalation/escalation.service';
+import { HrContentService } from '../../content/hr-content.service';
+import { LeaveService } from '../leave/leave.service';
+import { HrDocumentRequestService } from '../verification/hr-document-request.service';
 import type {
   ConversationResponse,
   InboundConversationMessage,
@@ -19,6 +22,9 @@ export class ConversationService {
     private readonly chatSessionService: ChatSessionService,
     private readonly menuReplyBuilder: MenuReplyBuilderService,
     private readonly escalationService: EscalationService,
+    private readonly hrContentService: HrContentService,
+    private readonly leaveService: LeaveService,
+    private readonly hrDocumentRequestService: HrDocumentRequestService,
   ) {}
 
   /**
@@ -88,6 +94,36 @@ export class ConversationService {
     const selection = message.trim().toLowerCase();
 
     /**
+     * Once the employee has asked to speak with HR, the next message is
+     * the issue that will become the ticket reason. The bot must not
+     * interpret that message as a menu selection.
+     */
+    if (session.currentState === 'HR_MESSAGE') {
+      return this.handleHrMessageSubmission(
+        employee.id,
+        session.id,
+        session.currentState,
+        message,
+      );
+    }
+
+    /**
+     * Once an HR ticket is active, subsequent employee messages remain
+     * part of that same conversation. They are already persisted by the
+     * inbound message log above and must not create another ticket or be
+     * interpreted as bot navigation.
+     */
+    if (session.currentState === 'HR_QUEUE') {
+      return this.handleHrQueueState(session.id);
+    }
+
+    const currentMenuId = this.getMenuIdForState(session.currentState);
+    const numericMenuSelection =
+      currentMenuId && /^\d+$/.test(selection)
+        ? this.menuReplyBuilder.getSelection(currentMenuId, selection)
+        : undefined;
+
+    /**
      * Global "back" navigation.
      *
      * The MVP does not maintain a navigation stack. "back"
@@ -97,7 +133,7 @@ export class ConversationService {
      * The active HR escalation, if any, is not resolved by
      * changing the conversation state.
      */
-    if (this.isBack(selection)) {
+    if (this.isBack(selection) || numericMenuSelection?.action === 'back') {
       const parentMenuId = this.getParentMenuId(session.currentState);
 
       if (parentMenuId === MENU_IDS.MAIN) {
@@ -130,19 +166,17 @@ export class ConversationService {
     }
 
     /**
-     * Talk to HR is a global action and can be selected
-     * from the main menu regardless of the current state.
+     * Talk to HR is available from every submenu, but not from
+     * the main menu. Employees should first see the self-service
+     * options before choosing to escalate to HR.
      */
     if (
-      selection === MENU_SELECTION_IDS.TALK_TO_HR ||
-      this.isTalkToHrAlias(selection)
+      session.currentState !== 'MAIN_MENU' &&
+      (selection === MENU_SELECTION_IDS.TALK_TO_HR ||
+        this.isTalkToHrAlias(selection) ||
+        numericMenuSelection?.action === 'talk_to_hr')
     ) {
-      return this.escalateToHr(
-        employee.id,
-        session.id,
-        session.currentState,
-        'Employee selected Talk to HR.',
-      );
+      return this.requestHrMessage(session.id, session.currentState);
     }
 
     /**
@@ -168,7 +202,7 @@ export class ConversationService {
         return this.handlePolicySelection(session.id, selection);
 
       case 'LEAVE_MENU':
-        return this.handleLeaveSelection(session.id, selection);
+        return this.handleLeaveSelection(session.id, selection, phoneNumber);
 
       case 'BENEFITS_MENU':
         return this.handleBenefitsSelection(session.id, selection);
@@ -176,8 +210,8 @@ export class ConversationService {
       case 'VERIFICATION_MENU':
         return this.handleVerificationSelection(session.id, selection);
 
-      case 'HR_QUEUE':
-        return this.handleHrQueueState(
+      case 'DOCUMENT_REQUEST_MENU':
+        return this.handleDocumentRequestSelection(
           employee.id,
           session.id,
           session.currentState,
@@ -236,7 +270,7 @@ export class ConversationService {
           MENU_IDS.BENEFITS,
         );
 
-      case 'open_employment_verification':
+      case 'open_hr_document_requests':
         return this.transitionAndMenuResponse(
           sessionId,
           'VERIFICATION_MENU',
@@ -253,7 +287,7 @@ export class ConversationService {
   }
 
   /**
-   * Policy FAQ state.
+   * I Have a Question state.
    *
    * Actual policy content will be connected through the
    * Policy module in its own integration step.
@@ -275,18 +309,39 @@ export class ConversationService {
       );
     }
 
-    return this.createResponse(sessionId, 'POLICY_MENU', menuSelection.action);
+    const content = this.hrContentService.get('policy', menuSelection.id);
+
+    if (!content) {
+      return this.createResponse(sessionId, 'POLICY_MENU', 'content_not_found');
+    }
+
+    return {
+      success: true,
+      sessionId,
+      state: 'POLICY_MENU',
+      action: menuSelection.action,
+      message: content.answer,
+      replies: [
+        {
+          type: 'text',
+          text: content.answer,
+        },
+      ],
+      escalationAvailable: true,
+    };
   }
 
   /**
-   * Leave state.
+   * Leave & Time Off state.
    *
-   * The actual LeaveService integration will be connected
-   * separately.
+   * Static leave information is served from the HR content layer.
+   * Leave balance is retrieved through LeaveService, which keeps
+   * the conversation layer independent of the spreadsheet adapter.
    */
   private async handleLeaveSelection(
     sessionId: string,
     selection: string,
+    phoneNumber: string,
   ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
       MENU_IDS.LEAVE,
@@ -301,7 +356,86 @@ export class ConversationService {
       );
     }
 
+    if (menuSelection.action === 'open_leave_balance') {
+      return this.handleLeaveBalanceSelection(sessionId, phoneNumber);
+    }
+
+    if (
+      menuSelection.action === 'show_leave_types' ||
+      menuSelection.action === 'show_how_to_apply_leave' ||
+      menuSelection.action === 'show_leave_application_status'
+    ) {
+      const content = this.hrContentService.get('leave', menuSelection.id);
+
+      if (!content) {
+        return this.createResponse(
+          sessionId,
+          'LEAVE_MENU',
+          'content_not_found',
+        );
+      }
+
+      return {
+        success: true,
+        sessionId,
+        state: 'LEAVE_MENU',
+        action: menuSelection.action,
+        message: content.answer,
+        replies: [
+          {
+            type: 'text',
+            text: content.answer,
+          },
+        ],
+        escalationAvailable: true,
+      };
+    }
+
     return this.createResponse(sessionId, 'LEAVE_MENU', menuSelection.action);
+  }
+
+  private async handleLeaveBalanceSelection(
+    sessionId: string,
+    phoneNumber: string,
+  ): Promise<ConversationResponse> {
+    const result = await this.leaveService.getLeaveBalanceByPhone(phoneNumber);
+
+    switch (result.status) {
+      case 'available':
+        return {
+          success: true,
+          sessionId,
+          state: 'LEAVE_MENU',
+          action: 'open_leave_balance',
+          message: `You have ${result.balance.remainingDays} leave day${result.balance.remainingDays === 1 ? '' : 's'} remaining.`,
+          replies: [
+            {
+              type: 'text',
+              text: `You have ${result.balance.remainingDays} leave day${result.balance.remainingDays === 1 ? '' : 's'} remaining.`,
+            },
+          ],
+          escalationAvailable: true,
+        };
+
+      case 'employee-not-found':
+      case 'invalid-phone-number':
+      case 'unavailable':
+        return {
+          success: true,
+          sessionId,
+          state: 'LEAVE_MENU',
+          action: 'leave_balance_unavailable',
+          message:
+            'Your leave balance is currently unavailable. Please contact HR for assistance.',
+          replies: [
+            {
+              type: 'text',
+              text: 'Your leave balance is currently unavailable. Please contact HR for assistance.',
+            },
+          ],
+          escalationAvailable: true,
+        };
+    }
   }
 
   /**
@@ -324,11 +458,30 @@ export class ConversationService {
       );
     }
 
-    return this.createResponse(
+    const content = this.hrContentService.get('benefits', menuSelection.id);
+
+    if (!content) {
+      return this.createResponse(
+        sessionId,
+        'BENEFITS_MENU',
+        'content_not_found',
+      );
+    }
+
+    return {
+      success: true,
       sessionId,
-      'BENEFITS_MENU',
-      menuSelection.action,
-    );
+      state: 'BENEFITS_MENU',
+      action: menuSelection.action,
+      message: content.answer,
+      replies: [
+        {
+          type: 'text',
+          text: content.answer,
+        },
+      ],
+      escalationAvailable: true,
+    };
   }
 
   /**
@@ -351,11 +504,11 @@ export class ConversationService {
       );
     }
 
-    if (menuSelection.action === 'request_verification') {
-      return this.transitionAndRespond(
+    if (menuSelection.action === 'open_document_request') {
+      return this.transitionAndMenuResponse(
         sessionId,
-        'VERIFICATION_CONFIRM',
-        'verification_request',
+        'DOCUMENT_REQUEST_MENU',
+        MENU_IDS.DOCUMENT_REQUEST,
       );
     }
 
@@ -367,46 +520,136 @@ export class ConversationService {
   }
 
   /**
-   * Handles an employee who is currently waiting for HR.
+   * Handles HR document requests.
    *
-   * The employee can continue using the bot by typing "menu".
-   * Their existing escalation remains active in the background.
+   * The employee is already identified by their registered phone number.
+   * The selected document request is escalated to HR for processing.
+   * The actual document is not generated or delivered by the bot.
    */
-  private async handleHrQueueState(
+  private async handleDocumentRequestSelection(
     employeeId: string,
     sessionId: string,
     currentState: string,
     selection: string,
   ): Promise<ConversationResponse> {
-    /**
-     * "menu" is handled globally before this method.
-     * If the employee sends another unsupported message while
-     * waiting, we simply remind them that their HR request
-     * remains in the queue.
-     */
-    if (selection === MENU_SELECTION_IDS.TALK_TO_HR) {
+    const menuSelection = this.menuReplyBuilder.getSelection(
+      MENU_IDS.DOCUMENT_REQUEST,
+      selection,
+    );
+
+    if (!menuSelection) {
+      return this.handleUnknownSelection(
+        sessionId,
+        'DOCUMENT_REQUEST_MENU',
+        MENU_IDS.DOCUMENT_REQUEST,
+      );
+    }
+
+    if (menuSelection.action === 'request_document') {
+      const request = this.hrDocumentRequestService.createRequest(
+        menuSelection.id,
+      );
+
+      if (!request) {
+        return this.handleUnknownSelection(
+          sessionId,
+          'DOCUMENT_REQUEST_MENU',
+          MENU_IDS.DOCUMENT_REQUEST,
+        );
+      }
+
       return this.escalateToHr(
         employeeId,
         sessionId,
         currentState,
-        'Employee checked the HR queue.',
+        `HR document request: ${request.label}`,
       );
     }
+
+    return this.createResponse(
+      sessionId,
+      'DOCUMENT_REQUEST_MENU',
+      menuSelection.action,
+    );
+  }
+
+  /**
+   * Prompts the employee for the issue that should become the HR ticket.
+   */
+  private async requestHrMessage(
+    sessionId: string,
+    currentState: string,
+  ): Promise<ConversationResponse> {
+    await this.chatSessionService.updateState(sessionId, 'HR_MESSAGE');
+
+    const message = 'Please tell us what you would like to discuss with HR.';
+
+    return {
+      success: true,
+      sessionId,
+      previousState: currentState,
+      state: 'HR_MESSAGE',
+      action: 'awaiting_hr_message',
+      message,
+      replies: [{ type: 'text', text: message }],
+      escalationAvailable: true,
+    };
+  }
+
+  /**
+   * Creates the HR ticket only after the employee supplies the issue.
+   */
+  private async handleHrMessageSubmission(
+    employeeId: string,
+    sessionId: string,
+    currentState: string,
+    message: string,
+  ): Promise<ConversationResponse> {
+    const issue = message.trim();
+
+    if (!issue) {
+      const prompt = 'Please tell us what you would like to discuss with HR.';
+
+      return {
+        success: true,
+        sessionId,
+        previousState: currentState,
+        state: 'HR_MESSAGE',
+        action: 'awaiting_hr_message',
+        message: prompt,
+        replies: [{ type: 'text', text: prompt }],
+        escalationAvailable: true,
+      };
+    }
+
+    return this.escalateToHr(
+      employeeId,
+      sessionId,
+      currentState,
+      issue,
+    );
+  }
+
+  /**
+   * Keeps subsequent employee messages in the same active HR ticket.
+   * The inbound message has already been persisted by handleMessage.
+   */
+  private async handleHrQueueState(
+    sessionId: string,
+  ): Promise<ConversationResponse> {
+    await this.chatSessionService.touch(sessionId);
+
+    const acknowledgement =
+      'Your message has been added to your HR request. An HR representative will respond as soon as possible.';
 
     return {
       success: true,
       sessionId,
       state: 'HR_QUEUE',
-      action: 'hr_queue',
-      message:
-        'Your request is still in the HR queue. Type "menu" to continue using the HR assistant.',
-      replies: [
-        {
-          type: 'text',
-          text: 'Your request is still in the HR queue. Type "menu" to continue using the HR assistant.',
-        },
-      ],
-      escalationAvailable: true,
+      action: 'hr_conversation',
+      message: acknowledgement,
+      replies: [{ type: 'text', text: acknowledgement }],
+      escalationAvailable: false,
     };
   }
 
@@ -691,11 +934,7 @@ export class ConversationService {
     };
   }
 
-  /**
-   * Backward-compatible aliases for Talk to HR.
-   *
-   * The configured menu ID remains the canonical value.
-   */
+  /* Backward-compatible aliases for Talk to HR. */
   private isTalkToHrAlias(selection: string): boolean {
     return ['talk-to-hr', 'hr', 'escalate'].includes(selection);
   }
@@ -708,11 +947,32 @@ export class ConversationService {
   }
 
   /**
-   * Returns the parent menu for a conversation state.
+   * Resolves a conversation state to its configured menu ID.
    *
-   * Current MVP menu hierarchy is one level deep, so all configured
-   * submenus return to the main menu.
+   * This allows numeric employee input such as "5" for Talk to HR
+   * or "6" for Back to use the same deterministic menu configuration
+   * as the regular selection handlers.
    */
+  private getMenuIdForState(state: string): string | undefined {
+    switch (state) {
+      case 'MAIN_MENU':
+        return MENU_IDS.MAIN;
+      case 'POLICY_MENU':
+        return MENU_IDS.POLICY;
+      case 'LEAVE_MENU':
+        return MENU_IDS.LEAVE;
+      case 'BENEFITS_MENU':
+        return MENU_IDS.BENEFITS;
+      case 'VERIFICATION_MENU':
+        return MENU_IDS.VERIFICATION;
+      case 'DOCUMENT_REQUEST_MENU':
+        return MENU_IDS.DOCUMENT_REQUEST;
+      default:
+        return undefined;
+    }
+  }
+
+  /* Returns the parent menu for a conversation state.*/
   private getParentMenuId(state: string): string | undefined {
     switch (state) {
       case 'POLICY_MENU':
@@ -723,6 +983,8 @@ export class ConversationService {
         return MENU_IDS.MAIN;
       case 'VERIFICATION_MENU':
         return MENU_IDS.MAIN;
+      case 'DOCUMENT_REQUEST_MENU':
+        return MENU_IDS.VERIFICATION;
       default:
         return undefined;
     }
@@ -743,6 +1005,8 @@ export class ConversationService {
         return 'BENEFITS_MENU';
       case MENU_IDS.VERIFICATION:
         return 'VERIFICATION_MENU';
+      case MENU_IDS.DOCUMENT_REQUEST:
+        return 'DOCUMENT_REQUEST_MENU';
       default:
         return undefined;
     }

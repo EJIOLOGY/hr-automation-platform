@@ -6,10 +6,21 @@ import { PrismaModule } from '../../core/prisma/prisma.module';
 import { ChatSessionModule } from './chat-session.module';
 import { MenuReplyBuilderService } from './menu-reply-builder.service';
 import { EscalationModule } from '../escalation/escalation.module';
+import { HrContentModule } from '../../content/hr-content.module';
+import { LeaveModule } from '../leave/leave.module';
+import { VerificationModule } from '../verification/verification.module';
 import { CONVERSATION_PORT } from './conversation.contracts';
 
 @Module({
-  imports: [EmployeeModule, PrismaModule, ChatSessionModule, EscalationModule],
+  imports: [
+    EmployeeModule,
+    PrismaModule,
+    ChatSessionModule,
+    EscalationModule,
+    HrContentModule,
+    LeaveModule,
+    VerificationModule,
+  ],
   providers: [
     ConversationService,
     MenuReplyBuilderService,
