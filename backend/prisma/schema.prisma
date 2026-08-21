@@ -68,10 +68,11 @@ model HrOfficer {
   fullName     String
   email        String          @unique
   passwordHash String
+  refreshTokenHash String?
   role         HrOfficerRole   @default(OFFICER)
   status       HrOfficerStatus @default(ACTIVE)
 
-  assignedEscalations Escalation[]  @relation("EscalationAssignee")
+  assignedEscalations Escalation[] @relation("EscalationAssignee")
   sentMessages        ChatMessage[] @relation("HrOfficerMessages")
   auditLogs           AuditLog[]
 
