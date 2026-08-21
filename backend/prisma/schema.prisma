@@ -8,7 +8,6 @@ datasource db {
   provider = "postgresql"
 }
 
-
 enum EmployeeStatus {
   ACTIVE
   INACTIVE
@@ -35,92 +34,155 @@ enum EscalationStatus {
   CLOSED
 }
 
+enum HrOfficerRole {
+  ADMIN
+  OFFICER
+}
+
+enum HrOfficerStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model Employee {
-  id               String           @id @default(uuid())
+  id             String         @id @default(uuid())
+  employeeNumber String         @unique
+  fullName       String
+  phoneNumber    String         @unique
+  department     String
+  jobTitle       String
+  status         EmployeeStatus @default(ACTIVE)
 
-  employeeNumber   String           @unique
-  fullName         String
-  phoneNumber      String           @unique
-  department       String
-  jobTitle         String
+  sessions    ChatSession[]
+  escalations Escalation[]
 
-  status           EmployeeStatus   @default(ACTIVE)
-
-  sessions         ChatSession[]
-  escalations      Escalation[]
-
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([employeeNumber])
   @@index([phoneNumber])
 }
 
+model HrOfficer {
+  id           String          @id @default(uuid())
+  fullName     String
+  email        String          @unique
+  passwordHash String
+  role         HrOfficerRole   @default(OFFICER)
+  status       HrOfficerStatus @default(ACTIVE)
+
+  assignedEscalations Escalation[]  @relation("EscalationAssignee")
+  sentMessages        ChatMessage[] @relation("HrOfficerMessages")
+  auditLogs           AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([status])
+}
+
 model ChatSession {
+  id String @id @default(uuid())
 
-  id               String           @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
-  employeeId       String
-  employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  currentState String
 
-  currentState     String
+  isActive Boolean @default(true)
 
-  isActive         Boolean          @default(true)
+  startedAt      DateTime  @default(now())
+  lastActivityAt DateTime  @default(now())
+  lastReadByHrAt DateTime?
+  endedAt        DateTime?
 
-  startedAt        DateTime         @default(now())
-  lastActivityAt   DateTime         @default(now())
-  endedAt          DateTime?
+  messages    ChatMessage[]
+  escalations Escalation[]
 
-  messages         ChatMessage[]
-  escalations      Escalation[]
-
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([employeeId])
   @@index([isActive])
   @@index([lastActivityAt])
+  @@index([lastReadByHrAt])
 }
 
 model ChatMessage {
+  id String @id @default(uuid())
 
-  id               String            @id @default(uuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  sessionId        String
-  session          ChatSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  direction   MessageDirection
+  messageType MessageType
+  content     String
 
-  direction        MessageDirection
+  sentByHrOfficerId String?
+  sentByHrOfficer   HrOfficer? @relation("HrOfficerMessages", fields: [sentByHrOfficerId], references: [id], onDelete: SetNull)
 
-  messageType      MessageType
+  metaMessageId String? @unique
+  rawPayload    Json?
 
-  content          String
-
-  metaMessageId    String?           @unique
-
-  rawPayload       Json?
-
-  createdAt        DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([sessionId])
   @@index([createdAt])
+  @@index([sentByHrOfficerId])
 }
 
 model Escalation {
-  id          String             @id @default(uuid())
+  id String @id @default(uuid())
 
-  employeeId  String
-  employee    Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
-  sessionId   String
-  session     ChatSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  reason      String
+  reason String
 
-  status      EscalationStatus   @default(OPEN)
+  status EscalationStatus @default(OPEN)
 
-  createdAt   DateTime           @default(now())
-  resolvedAt  DateTime?
+  assignedHrOfficerId String?
+  assignedHrOfficer   HrOfficer? @relation("EscalationAssignee", fields: [assignedHrOfficerId], references: [id], onDelete: SetNull)
+
+  category     String?
+  documentType String?
+
+  resolutionNote String?
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
 
   @@index([status])
   @@index([employeeId])
+  @@index([assignedHrOfficerId])
+  @@index([category])
+  @@index([documentType])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  actorType String
+
+  actorHrOfficerId String?
+  actorHrOfficer   HrOfficer? @relation(fields: [actorHrOfficerId], references: [id], onDelete: SetNull)
+
+  action     String
+  entityType String
+  entityId   String?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([actorHrOfficerId])
+  @@index([action])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([createdAt])
 }
