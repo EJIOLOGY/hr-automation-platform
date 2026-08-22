@@ -34,7 +34,10 @@ import { MENU_IDS, MENU_SELECTION_IDS } from './menu.config';
 describe('ConversationService', () => {
   let service: ConversationService;
   let employeeService: { findByPhoneNumber: jest.Mock };
-  let prisma: { chatMessage: { create: jest.Mock }; chatSession: any };
+  let prisma: {
+    chatMessage: { create: jest.Mock; findFirst: jest.Mock };
+    chatSession: any;
+  };
   let chatSessionService: {
     getOrCreateSession: jest.Mock;
     updateState: jest.Mock;
@@ -62,7 +65,10 @@ describe('ConversationService', () => {
   beforeEach(() => {
     employeeService = { findByPhoneNumber: jest.fn() };
     prisma = {
-      chatMessage: { create: jest.fn() },
+      chatMessage: {
+        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: 'previous-message' }),
+      },
       chatSession: {
         findUnique: jest.fn(),
       },
@@ -1134,10 +1140,56 @@ describe('ConversationService', () => {
       'emp-doc-evl',
       'session-doc-evl',
       'HR document request: Employment Verification Letter (EVL)',
+      {
+        category: 'DOCUMENT_REQUEST',
+        documentType: MENU_SELECTION_IDS.EMPLOYMENT_VERIFICATION_LETTER,
+      },
     );
     expect(response.escalated).toBe(true);
     expect(response.state).toBe('HR_QUEUE');
     expect(response.action).toBe('talk_to_hr');
+  });
+
+
+  it('passes structured document metadata when escalating an HR document request', async () => {
+    employeeService.findByPhoneNumber.mockResolvedValue({
+      id: 'emp-doc-salary',
+      status: 'ACTIVE',
+    });
+    chatSessionService.getOrCreateSession.mockResolvedValue({
+      id: 'session-doc-salary',
+      currentState: 'DOCUMENT_REQUEST_MENU',
+    });
+    menuReplyBuilder.getSelection.mockReturnValue({
+      id: MENU_SELECTION_IDS.SALARY_CERTIFICATE,
+      action: 'request_document',
+    });
+    hrDocumentRequestService.createRequest.mockReturnValue({
+      id: MENU_SELECTION_IDS.SALARY_CERTIFICATE,
+      label: 'Salary Certificate',
+    });
+    escalationService.createOrGetActiveEscalation.mockResolvedValue({
+      escalationId: 'esc-doc-salary',
+      status: 'OPEN',
+      queuePosition: 2,
+      hrBusy: true,
+    });
+
+    const response = await service.handleMessage({
+      senderPhoneNumber: '+2347044965784',
+      input: { kind: 'selection', value: '2' },
+    });
+
+    expect(escalationService.createOrGetActiveEscalation).toHaveBeenCalledWith(
+      'emp-doc-salary',
+      'session-doc-salary',
+      'HR document request: Salary Certificate',
+      {
+        category: 'DOCUMENT_REQUEST',
+        documentType: MENU_SELECTION_IDS.SALARY_CERTIFICATE,
+      },
+    );
+    expect(response.escalated).toBe(true);
   });
 
   it('returns from the document type menu to HR Document Requests', async () => {
@@ -1172,6 +1224,152 @@ describe('ConversationService', () => {
     );
     expect(response.state).toBe('VERIFICATION_MENU');
     expect(response.menu?.menuId).toBe(MENU_IDS.VERIFICATION);
+  });
+
+  it('shows the main menu for the first hi message', async () => {
+    employeeService.findByPhoneNumber.mockResolvedValue({
+      id: 'emp-first-hi',
+      status: 'ACTIVE',
+    });
+    chatSessionService.getOrCreateSession.mockResolvedValue({
+      id: 'session-first-hi',
+      currentState: 'MAIN_MENU',
+    });
+    prisma.chatMessage.findFirst.mockResolvedValue(null);
+    menuReplyBuilder.buildMenuReply.mockReturnValue({
+      type: 'menu',
+      menuId: MENU_IDS.MAIN,
+      title: 'HR Services',
+      prompt: 'How may we be of service?',
+      options: [],
+    });
+
+    const response = await service.handleMessage({
+      senderPhoneNumber: '+2347044965784',
+      input: { kind: 'text', value: 'hi' },
+    });
+
+    expect(response.menu?.menuId).toBe(MENU_IDS.MAIN);
+    expect(response.state).toBe('MAIN_MENU');
+  });
+
+  it('shows the main menu for the first arbitrary text message', async () => {
+    employeeService.findByPhoneNumber.mockResolvedValue({
+      id: 'emp-first-text',
+      status: 'ACTIVE',
+    });
+    chatSessionService.getOrCreateSession.mockResolvedValue({
+      id: 'session-first-text',
+      currentState: 'MAIN_MENU',
+    });
+    prisma.chatMessage.findFirst.mockResolvedValue(null);
+    menuReplyBuilder.buildMenuReply.mockReturnValue({
+      type: 'menu',
+      menuId: MENU_IDS.MAIN,
+      title: 'HR Services',
+      prompt: 'How may we be of service?',
+      options: [],
+    });
+
+    const response = await service.handleMessage({
+      senderPhoneNumber: '+2347044965784',
+      input: { kind: 'text', value: 'What can you help me with?' },
+    });
+
+    expect(response.menu?.menuId).toBe(MENU_IDS.MAIN);
+    expect(response.state).toBe('MAIN_MENU');
+  });
+
+  it('shows the main menu for the first numeric message without selecting it', async () => {
+    employeeService.findByPhoneNumber.mockResolvedValue({
+      id: 'emp-first-number',
+      status: 'ACTIVE',
+    });
+    chatSessionService.getOrCreateSession.mockResolvedValue({
+      id: 'session-first-number',
+      currentState: 'MAIN_MENU',
+    });
+    prisma.chatMessage.findFirst.mockResolvedValue(null);
+    menuReplyBuilder.buildMenuReply.mockReturnValue({
+      type: 'menu',
+      menuId: MENU_IDS.MAIN,
+      title: 'HR Services',
+      prompt: 'How may we be of service?',
+      options: [],
+    });
+
+    const response = await service.handleMessage({
+      senderPhoneNumber: '+2347044965784',
+      input: { kind: 'text', value: '1' },
+    });
+
+    expect(response.menu?.menuId).toBe(MENU_IDS.MAIN);
+    expect(menuReplyBuilder.getSelection).not.toHaveBeenCalled();
+  });
+
+  it('processes numeric input normally when the session has prior inbound history', async () => {
+    employeeService.findByPhoneNumber.mockResolvedValue({
+      id: 'emp-existing-number',
+      status: 'ACTIVE',
+    });
+    chatSessionService.getOrCreateSession.mockResolvedValue({
+      id: 'session-existing-number',
+      currentState: 'MAIN_MENU',
+    });
+    prisma.chatMessage.findFirst.mockResolvedValue({ id: 'prior-inbound' });
+    menuReplyBuilder.getSelection.mockReturnValue({
+      id: MENU_SELECTION_IDS.BENEFITS,
+      action: 'open_benefits',
+    });
+    menuReplyBuilder.buildMenuReply.mockReturnValue({
+      type: 'menu',
+      menuId: MENU_IDS.BENEFITS,
+      title: 'Benefits',
+      prompt: 'How may we be of service?',
+      options: [],
+    });
+
+    const response = await service.handleMessage({
+      senderPhoneNumber: '+2347044965784',
+      input: { kind: 'text', value: '1' },
+    });
+
+    expect(menuReplyBuilder.getSelection).toHaveBeenCalledWith(
+      MENU_IDS.MAIN,
+      '1',
+    );
+    expect(response.menu?.menuId).toBe(MENU_IDS.BENEFITS);
+  });
+
+  it('returns the existing fallback for invalid text in an existing main menu session', async () => {
+    employeeService.findByPhoneNumber.mockResolvedValue({
+      id: 'emp-existing-invalid',
+      status: 'ACTIVE',
+    });
+    chatSessionService.getOrCreateSession.mockResolvedValue({
+      id: 'session-existing-invalid',
+      currentState: 'MAIN_MENU',
+    });
+    prisma.chatMessage.findFirst.mockResolvedValue({ id: 'prior-inbound' });
+    menuReplyBuilder.getSelection.mockReturnValue(undefined);
+    menuReplyBuilder.buildMenuReply.mockReturnValue({
+      type: 'menu',
+      menuId: MENU_IDS.MAIN,
+      title: 'HR Services',
+      prompt: 'How may we be of service?',
+      options: [],
+    });
+
+    const response = await service.handleMessage({
+      senderPhoneNumber: '+2347044965784',
+      input: { kind: 'text', value: 'not a menu option' },
+    });
+
+    expect(response.action).toBe('fallback');
+    expect(response.replies[0]).toEqual({
+      type: 'text',
+      text: 'I could not match that selection. Please choose one of the available options.',
+    });
   });
 
 });

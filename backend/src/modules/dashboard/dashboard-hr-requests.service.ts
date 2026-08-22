@@ -24,41 +24,62 @@ interface HrRequestCursor {
   id: string;
 }
 
-export interface HrRequestListQuery {
-  status?: EscalationStatus;
-  documentType?: string;
-  cursor?: string;
-  limit?: number;
-}
-
 @Injectable()
 export class DashboardHrRequestsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(query: HrRequestListQuery) {
+  async list(query: {
+    status?: EscalationStatus;
+    documentType?: string;
+    cursor?: string;
+    limit?: number;
+  }) {
     const limit = this.normalizeLimit(query.limit);
     const cursor = query.cursor ? this.decodeCursor(query.cursor) : undefined;
     const documentType = query.documentType
       ? this.resolveDocumentType(query.documentType)
       : undefined;
 
+    const structuredDocumentFilter = documentType
+      ? {
+          category: 'DOCUMENT_REQUEST',
+          documentType: documentType.id,
+        }
+      : {
+          category: 'DOCUMENT_REQUEST',
+        };
+
+    const legacyDocumentFilter = documentType
+      ? {
+          reason: {
+            startsWith: `${DOCUMENT_REQUEST_PREFIX} ${documentType.label}`,
+          },
+        }
+      : {
+          reason: {
+            startsWith: DOCUMENT_REQUEST_PREFIX,
+          },
+        };
+
     const rows = await this.prisma.escalation.findMany({
       where: {
         ...(query.status ? { status: query.status } : {}),
-        reason: documentType
-          ? { startsWith: `${DOCUMENT_REQUEST_PREFIX} ${documentType.label}` }
-          : { startsWith: DOCUMENT_REQUEST_PREFIX },
-        ...(cursor
-          ? {
-              OR: [
-                { createdAt: { lt: new Date(cursor.createdAt) } },
+        AND: [
+          { OR: [structuredDocumentFilter, legacyDocumentFilter] },
+          ...(cursor
+            ? [
                 {
-                  createdAt: new Date(cursor.createdAt),
-                  id: { lt: cursor.id },
+                  OR: [
+                    { createdAt: { lt: new Date(cursor.createdAt) } },
+                    {
+                      createdAt: new Date(cursor.createdAt),
+                      id: { lt: cursor.id },
+                    },
+                  ],
                 },
-              ],
-            }
-          : {}),
+              ]
+            : []),
+        ],
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -145,7 +166,7 @@ export class DashboardHrRequestsService {
       },
     });
 
-    if (!escalation || !this.isDocumentRequest(escalation.reason)) {
+    if (!escalation || !this.isDocumentRequest(escalation)) {
       throw new NotFoundException('HR document request not found.');
     }
 
@@ -154,12 +175,13 @@ export class DashboardHrRequestsService {
 
   private toView(row: any) {
     const derived = this.parseDocumentType(row.reason);
+    const structured = this.findDocumentType(row.documentType);
 
     return {
       id: row.id,
-      category: row.category ?? 'DOCUMENT_REQUEST',
-      documentType: row.documentType ?? derived?.id ?? null,
-      documentLabel: derived?.label ?? row.documentType ?? 'Other HR Document',
+      category: row.category ?? (derived ? 'DOCUMENT_REQUEST' : null),
+      documentType: structured?.id ?? derived?.id ?? null,
+      documentLabel: structured?.label ?? derived?.label ?? 'Other HR Document',
       reason: row.reason,
       status: row.status,
       resolutionNote: row.resolutionNote,
@@ -171,13 +193,22 @@ export class DashboardHrRequestsService {
     };
   }
 
-  private isDocumentRequest(reason: string) {
-    return reason.trim().startsWith(DOCUMENT_REQUEST_PREFIX);
+  private isDocumentRequest(row: { category?: string | null; documentType?: string | null; reason: string }) {
+    return (
+      row.category === 'DOCUMENT_REQUEST' ||
+      row.documentType !== null && row.documentType !== undefined ||
+      row.reason.trim().startsWith(DOCUMENT_REQUEST_PREFIX)
+    );
   }
 
   private parseDocumentType(reason: string) {
     const value = reason.trim().slice(DOCUMENT_REQUEST_PREFIX.length).trim();
     return DOCUMENT_TYPES.find((type) => type.label === value);
+  }
+
+  private findDocumentType(value?: string | null) {
+    if (!value) return undefined;
+    return DOCUMENT_TYPES.find((type) => type.id === value);
   }
 
   private resolveDocumentType(value: string) {

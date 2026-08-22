@@ -79,6 +79,16 @@ export class ConversationService {
       'MAIN_MENU',
     );
 
+    const previousInboundMessage = await this.prisma.chatMessage.findFirst({
+      where: {
+        sessionId: session.id,
+        direction: MessageDirection.INBOUND,
+      },
+      select: {
+        id: true,
+      },
+    });
+
     /**
      * Log every inbound message.
      */
@@ -90,6 +100,10 @@ export class ConversationService {
         content: message,
       },
     });
+
+    if (!previousInboundMessage) {
+      return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
+    }
 
     const selection = message.trim().toLowerCase();
 
@@ -563,6 +577,10 @@ export class ConversationService {
         sessionId,
         currentState,
         `HR document request: ${request.label}`,
+        {
+          category: 'DOCUMENT_REQUEST',
+          documentType: request.id,
+        },
       );
     }
 
@@ -826,13 +844,23 @@ export class ConversationService {
     sessionId: string,
     currentState: string,
     reason: string,
+    context?: {
+      category?: 'DOCUMENT_REQUEST';
+      documentType?: string;
+    },
   ): Promise<ConversationResponse> {
-    const queueStatus =
-      await this.escalationService.createOrGetActiveEscalation(
-        employeeId,
-        sessionId,
-        reason,
-      );
+    const queueStatus = context
+      ? await this.escalationService.createOrGetActiveEscalation(
+          employeeId,
+          sessionId,
+          reason,
+          context,
+        )
+      : await this.escalationService.createOrGetActiveEscalation(
+          employeeId,
+          sessionId,
+          reason,
+        );
 
     await this.chatSessionService.updateState(sessionId, 'HR_QUEUE');
 

@@ -9,6 +9,11 @@ export interface EscalationQueueStatus {
   hrBusy: boolean;
 }
 
+export interface EscalationRequestContext {
+  category?: string;
+  documentType?: string;
+}
+
 @Injectable()
 export class EscalationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -17,18 +22,12 @@ export class EscalationService {
     employeeId: string,
     sessionId: string,
     reason: string,
+    context?: EscalationRequestContext,
   ): Promise<EscalationQueueStatus> {
-    const existingEscalation = await this.prisma.escalation.findFirst({
-      where: {
-        employeeId,
-        status: {
-          in: [EscalationStatus.OPEN, EscalationStatus.IN_PROGRESS],
-        },
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
+    const existingEscalation = await this.findReusableActiveEscalation(
+      employeeId,
+      context,
+    );
 
     /**
      * Check whether another employee is currently
@@ -44,28 +43,18 @@ export class EscalationService {
     });
 
     /**
-     * Reuse an existing active escalation.
+     * Reuse an existing active escalation only when it
+     * represents the same request context.
      *
-     * If HR is currently free and this employee's request
-     * is waiting, promote it immediately to IN_PROGRESS.
+     * Document requests are matched by category + documentType.
+     * General HR escalations retain the existing employee-level
+     * reuse behaviour.
+     *
+     * Reusing an existing OPEN escalation does not promote it
+     * implicitly. Queue progression is handled explicitly through
+     * startHandling(), preserving the existing single-queue semantics.
      */
     if (existingEscalation) {
-      if (
-        !activeHrRequest &&
-        existingEscalation.status === EscalationStatus.OPEN
-      ) {
-        const promotedEscalation = await this.prisma.escalation.update({
-          where: {
-            id: existingEscalation.id,
-          },
-          data: {
-            status: EscalationStatus.IN_PROGRESS,
-          },
-        });
-
-        return this.getQueueStatus(promotedEscalation.id);
-      }
-
       return this.getQueueStatus(existingEscalation.id);
     }
 
@@ -84,10 +73,53 @@ export class EscalationService {
         sessionId,
         reason,
         status,
+        ...(context?.category !== undefined
+          ? { category: context.category }
+          : {}),
+        ...(context?.documentType !== undefined
+          ? { documentType: context.documentType }
+          : {}),
       },
     });
 
     return this.getQueueStatus(escalation.id);
+  }
+
+  private async findReusableActiveEscalation(
+    employeeId: string,
+    context?: EscalationRequestContext,
+  ) {
+    if (context?.category === 'DOCUMENT_REQUEST') {
+      if (!context.documentType) {
+        return null;
+      }
+
+      return this.prisma.escalation.findFirst({
+        where: {
+          employeeId,
+          status: {
+            in: [EscalationStatus.OPEN, EscalationStatus.IN_PROGRESS],
+          },
+          category: 'DOCUMENT_REQUEST',
+          documentType: context.documentType,
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      });
+    }
+
+    return this.prisma.escalation.findFirst({
+      where: {
+        employeeId,
+        status: {
+          in: [EscalationStatus.OPEN, EscalationStatus.IN_PROGRESS],
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
   }
 
   async getQueueStatus(escalationId: string): Promise<EscalationQueueStatus> {
