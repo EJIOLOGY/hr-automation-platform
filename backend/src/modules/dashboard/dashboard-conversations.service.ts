@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
 
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { EscalationStatus } from '../../generated/prisma/enums';
 
 interface ConversationCursor {
@@ -19,7 +21,10 @@ interface MessageCursor {
 
 @Injectable()
 export class DashboardConversationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   private encodeCursor(cursor: ConversationCursor | MessageCursor): string {
     return Buffer.from(JSON.stringify(cursor)).toString('base64url');
@@ -82,8 +87,8 @@ export class DashboardConversationsService {
         isActive: true,
         startedAt: true,
         lastActivityAt: true,
+        lastReadByHrAt: true,
         endedAt: true,
-
         employee: {
           select: {
             id: true,
@@ -95,7 +100,6 @@ export class DashboardConversationsService {
             status: true,
           },
         },
-
         messages: {
           take: 1,
           orderBy: [
@@ -115,7 +119,6 @@ export class DashboardConversationsService {
             createdAt: true,
           },
         },
-
         escalations: {
           where: {
             status: {
@@ -138,6 +141,7 @@ export class DashboardConversationsService {
             category: true,
             documentType: true,
             createdAt: true,
+            assignedHrOfficerId: true,
           },
         },
       },
@@ -145,7 +149,6 @@ export class DashboardConversationsService {
 
     const hasNextPage = sessions.length > take;
     const items = hasNextPage ? sessions.slice(0, take) : sessions;
-
     const lastItem = items[items.length - 1];
 
     return {
@@ -156,11 +159,11 @@ export class DashboardConversationsService {
         isActive: session.isActive,
         startedAt: session.startedAt,
         lastActivityAt: session.lastActivityAt,
+        lastReadByHrAt: session.lastReadByHrAt,
         endedAt: session.endedAt,
         latestMessage: session.messages[0] ?? null,
         activeEscalation: session.escalations[0] ?? null,
       })),
-
       pagination: {
         limit: take,
         hasNextPage,
@@ -252,12 +255,10 @@ export class DashboardConversationsService {
 
     const hasNextPage = messages.length > take;
     const items = hasNextPage ? messages.slice(0, take) : messages;
-
     const lastItem = items[items.length - 1];
 
     return {
       items: items.reverse(),
-
       pagination: {
         limit: take,
         hasNextPage,
@@ -270,5 +271,161 @@ export class DashboardConversationsService {
             : null,
       },
     };
+  }
+
+  async replyToConversation(
+    sessionId: string,
+    hrOfficerId: string,
+    content: string,
+  ) {
+    const trimmedContent = content.trim();
+
+    if (!trimmedContent) {
+      throw new BadRequestException('Message content cannot be empty.');
+    }
+
+    if (trimmedContent.length > 2000) {
+      throw new BadRequestException(
+        'Message content must not exceed 2000 characters.',
+      );
+    }
+
+    const session = await this.prisma.chatSession.findUnique({
+      where: {
+        id: sessionId,
+      },
+      select: {
+        id: true,
+        isActive: true,
+        escalations: {
+          where: {
+            status: EscalationStatus.IN_PROGRESS,
+          },
+          orderBy: [
+            {
+              createdAt: 'asc',
+            },
+            {
+              id: 'asc',
+            },
+          ],
+          take: 1,
+          select: {
+            id: true,
+            assignedHrOfficerId: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Conversation not found.');
+    }
+
+    const activeEscalation = session.escalations[0];
+
+    if (!activeEscalation) {
+      throw new ForbiddenException(
+        'This conversation is not currently assigned to an HR officer.',
+      );
+    }
+
+    if (activeEscalation.assignedHrOfficerId !== hrOfficerId) {
+      throw new ForbiddenException(
+        'This conversation is assigned to another HR officer.',
+      );
+    }
+
+    const now = new Date();
+
+    const message = await this.prisma.$transaction(async (tx) => {
+      const createdMessage = await tx.chatMessage.create({
+        data: {
+          sessionId,
+          direction: 'OUTBOUND',
+          messageType: 'TEXT',
+          content: trimmedContent,
+          sentByHrOfficerId: hrOfficerId,
+        },
+        select: {
+          id: true,
+          sessionId: true,
+          direction: true,
+          messageType: true,
+          content: true,
+          sentByHrOfficerId: true,
+          createdAt: true,
+        },
+      });
+
+      await tx.chatSession.update({
+        where: {
+          id: sessionId,
+        },
+        data: {
+          lastActivityAt: now,
+        },
+      });
+
+      return createdMessage;
+    });
+
+    await this.auditService.log({
+      actorType: 'HR_OFFICER',
+      actorHrOfficerId: hrOfficerId,
+      action: 'HR_MESSAGE_SENT',
+      entityType: 'CHAT_MESSAGE',
+      entityId: message.id,
+      metadata: {
+        sessionId,
+        escalationId: activeEscalation.id,
+      },
+    });
+
+    return message;
+  }
+
+  async markConversationRead(sessionId: string, hrOfficerId: string) {
+    const session = await this.prisma.chatSession.findUnique({
+      where: {
+        id: sessionId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Conversation not found.');
+    }
+
+    const readAt = new Date();
+
+    const updatedSession = await this.prisma.chatSession.update({
+      where: {
+        id: sessionId,
+      },
+      data: {
+        lastReadByHrAt: readAt,
+      },
+      select: {
+        id: true,
+        lastReadByHrAt: true,
+      },
+    });
+
+    await this.auditService.log({
+      actorType: 'HR_OFFICER',
+      actorHrOfficerId: hrOfficerId,
+      action: 'CONVERSATION_READ',
+      entityType: 'CHAT_SESSION',
+      entityId: sessionId,
+      metadata: {
+        readAt: updatedSession.lastReadByHrAt?.toISOString() ?? null,
+      },
+    });
+
+    return updatedSession;
   }
 }

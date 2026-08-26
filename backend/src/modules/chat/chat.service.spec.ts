@@ -263,7 +263,9 @@ describe('ConversationService', () => {
     });
 
     expect(chatSessionService.updateState).not.toHaveBeenCalled();
-    expect(escalationService.createOrGetActiveEscalation).not.toHaveBeenCalled();
+    expect(
+      escalationService.createOrGetActiveEscalation,
+    ).not.toHaveBeenCalled();
     expect(response.state).toBe('HR_QUEUE');
     expect(response.action).toBe('hr_conversation');
   });
@@ -853,7 +855,9 @@ describe('ConversationService', () => {
       'session-6',
       'HR_MESSAGE',
     );
-    expect(escalationService.createOrGetActiveEscalation).not.toHaveBeenCalled();
+    expect(
+      escalationService.createOrGetActiveEscalation,
+    ).not.toHaveBeenCalled();
     expect(response.state).toBe('HR_MESSAGE');
     expect(response.action).toBe('awaiting_hr_message');
     expect(response.replies[0]).toEqual({
@@ -922,7 +926,9 @@ describe('ConversationService', () => {
       },
     });
 
-    expect(escalationService.createOrGetActiveEscalation).not.toHaveBeenCalled();
+    expect(
+      escalationService.createOrGetActiveEscalation,
+    ).not.toHaveBeenCalled();
     expect(chatSessionService.touch).toHaveBeenCalledWith(
       'session-hr-follow-up',
     );
@@ -949,7 +955,9 @@ describe('ConversationService', () => {
       input: { kind: 'text', value: '   ' },
     });
 
-    expect(escalationService.createOrGetActiveEscalation).not.toHaveBeenCalled();
+    expect(
+      escalationService.createOrGetActiveEscalation,
+    ).not.toHaveBeenCalled();
     expect(response.state).toBe('HR_MESSAGE');
     expect(response.action).toBe('awaiting_hr_message');
   });
@@ -977,7 +985,9 @@ describe('ConversationService', () => {
       MENU_IDS.POLICY,
       '8',
     );
-    expect(escalationService.createOrGetActiveEscalation).not.toHaveBeenCalled();
+    expect(
+      escalationService.createOrGetActiveEscalation,
+    ).not.toHaveBeenCalled();
     expect(response.state).toBe('HR_MESSAGE');
   });
 
@@ -1149,7 +1159,6 @@ describe('ConversationService', () => {
     expect(response.state).toBe('HR_QUEUE');
     expect(response.action).toBe('talk_to_hr');
   });
-
 
   it('passes structured document metadata when escalating an HR document request', async () => {
     employeeService.findByPhoneNumber.mockResolvedValue({
@@ -1371,5 +1380,4 @@ describe('ConversationService', () => {
       text: 'I could not match that selection. Please choose one of the available options.',
     });
   });
-
 });

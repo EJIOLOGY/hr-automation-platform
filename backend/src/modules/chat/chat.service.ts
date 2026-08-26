@@ -640,12 +640,7 @@ export class ConversationService {
       };
     }
 
-    return this.escalateToHr(
-      employeeId,
-      sessionId,
-      currentState,
-      issue,
-    );
+    return this.escalateToHr(employeeId, sessionId, currentState, issue);
   }
 
   /**
