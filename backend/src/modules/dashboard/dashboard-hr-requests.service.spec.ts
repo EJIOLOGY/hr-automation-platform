@@ -27,7 +27,7 @@ describe('DashboardHrRequestsService', () => {
     prisma = {
       escalation: {
         findMany: jest.fn(),
-        findUnique: jest.fn(),
+        findFirst: jest.fn(),
       },
     };
 
@@ -63,21 +63,55 @@ describe('DashboardHrRequestsService', () => {
     });
     expect(prisma.escalation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          AND: expect.arrayContaining([
-            {
-              OR: [
-                { category: 'DOCUMENT_REQUEST' },
-                { reason: { startsWith: 'HR document request:' } },
-              ],
-            },
-          ]),
-        }),
+        where: expect.objectContaining({ category: 'DOCUMENT_REQUEST' }),
       }),
     );
   });
 
-  it('supports structured filtering by document type while retaining legacy fallback', async () => {
+  it('returns multiple document request types while excluding general escalations in the database query', async () => {
+    prisma.escalation.findMany.mockResolvedValue([
+      {
+        id: 'esc-salary',
+        category: 'DOCUMENT_REQUEST',
+        documentType: 'salary_certificate',
+        reason: 'HR document request: Salary Certificate',
+        status: EscalationStatus.OPEN,
+        resolutionNote: null,
+        createdAt: new Date('2026-08-21T11:00:00.000Z'),
+        resolvedAt: null,
+        employee,
+        assignedHrOfficer: null,
+        session,
+      },
+      {
+        id: 'esc-noc',
+        category: 'DOCUMENT_REQUEST',
+        documentType: 'no_objection_certificate',
+        reason: 'HR document request: No Objection Certificate (NOC)',
+        status: EscalationStatus.OPEN,
+        resolutionNote: null,
+        createdAt: new Date('2026-08-21T10:00:00.000Z'),
+        resolvedAt: null,
+        employee,
+        assignedHrOfficer: null,
+        session,
+      },
+    ]);
+
+    const result = await service.list({});
+
+    expect(result.items.map((item) => item.documentType)).toEqual([
+      'salary_certificate',
+      'no_objection_certificate',
+    ]);
+    expect(prisma.escalation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ category: 'DOCUMENT_REQUEST' }),
+      }),
+    );
+  });
+
+  it('filters only document requests by document type', async () => {
     prisma.escalation.findMany.mockResolvedValue([]);
 
     await service.list({ documentType: 'salary_certificate' });
@@ -85,28 +119,15 @@ describe('DashboardHrRequestsService', () => {
     expect(prisma.escalation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          AND: expect.arrayContaining([
-            {
-              OR: [
-                {
-                  category: 'DOCUMENT_REQUEST',
-                  documentType: 'salary_certificate',
-                },
-                {
-                  reason: {
-                    startsWith: 'HR document request: Salary Certificate',
-                  },
-                },
-              ],
-            },
-          ]),
+          category: 'DOCUMENT_REQUEST',
+          documentType: 'salary_certificate',
         }),
       }),
     );
   });
 
   it('returns a structured document request by id', async () => {
-    prisma.escalation.findUnique.mockResolvedValue({
+    prisma.escalation.findFirst.mockResolvedValue({
       id: 'esc-1',
       category: 'DOCUMENT_REQUEST',
       documentType: 'no_objection_certificate',
@@ -131,46 +152,52 @@ describe('DashboardHrRequestsService', () => {
     expect(result.documentLabel).toBe('No Objection Certificate (NOC)');
   });
 
-  it('supports legacy document requests with null structured fields', async () => {
-    prisma.escalation.findUnique.mockResolvedValue({
-      id: 'esc-legacy',
-      category: null,
-      documentType: null,
-      reason: 'HR document request: Salary Certificate',
-      status: EscalationStatus.OPEN,
-      resolutionNote: null,
-      createdAt: new Date('2026-08-21T10:00:00.000Z'),
-      resolvedAt: null,
-      employee,
-      assignedHrOfficer: null,
-      session: {
-        ...session,
-        startedAt: new Date('2026-08-21T09:00:00.000Z'),
-        endedAt: null,
-      },
-    });
-
-    const result = await service.getById('esc-legacy');
-
-    expect(result.category).toBe('DOCUMENT_REQUEST');
-    expect(result.documentType).toBe('salary_certificate');
-    expect(result.documentLabel).toBe('Salary Certificate');
-  });
-
   it('does not expose a non-document escalation through the HR request endpoint', async () => {
-    prisma.escalation.findUnique.mockResolvedValue({
-      id: 'esc-1',
-      category: null,
-      documentType: null,
-      reason: 'Employee needs HR assistance',
-      status: EscalationStatus.OPEN,
-      employee,
-      assignedHrOfficer: null,
-      session,
-    });
+    prisma.escalation.findFirst.mockResolvedValue(null);
 
     await expect(service.getById('esc-1')).rejects.toBeInstanceOf(
       NotFoundException,
+    );
+    expect(prisma.escalation.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'esc-1', category: 'DOCUMENT_REQUEST' },
+      }),
+    );
+  });
+
+  it('applies status and document type filters together', async () => {
+    prisma.escalation.findMany.mockResolvedValue([]);
+
+    await service.list({
+      status: EscalationStatus.OPEN,
+      documentType: 'no_objection_certificate',
+    });
+
+    expect(prisma.escalation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          category: 'DOCUMENT_REQUEST',
+          status: EscalationStatus.OPEN,
+          documentType: 'no_objection_certificate',
+        }),
+      }),
+    );
+  });
+
+  it('uses a stable cursor for pagination', async () => {
+    prisma.escalation.findMany.mockResolvedValue([]);
+    const cursor = Buffer.from(
+      JSON.stringify({ id: 'esc-1', createdAt: '2026-08-21T10:00:00.000Z' }),
+    ).toString('base64url');
+
+    await service.list({ cursor, limit: 10 });
+
+    expect(prisma.escalation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 11,
+        where: expect.objectContaining({ category: 'DOCUMENT_REQUEST' }),
+      }),
     );
   });
 

@@ -1,11 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EscalationStatus } from '../../generated/prisma/enums';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { HR_DOCUMENT_REQUEST_TYPES } from './dashboard-hr-requests.dto';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 50;
-const DOCUMENT_REQUEST_PREFIX = 'HR document request:';
-
 const DOCUMENT_TYPES = [
   {
     id: 'employment_verification_letter',
@@ -40,32 +39,12 @@ export class DashboardHrRequestsService {
       ? this.resolveDocumentType(query.documentType)
       : undefined;
 
-    const structuredDocumentFilter = documentType
-      ? {
-          category: 'DOCUMENT_REQUEST',
-          documentType: documentType.id,
-        }
-      : {
-          category: 'DOCUMENT_REQUEST',
-        };
-
-    const legacyDocumentFilter = documentType
-      ? {
-          reason: {
-            startsWith: `${DOCUMENT_REQUEST_PREFIX} ${documentType.label}`,
-          },
-        }
-      : {
-          reason: {
-            startsWith: DOCUMENT_REQUEST_PREFIX,
-          },
-        };
-
     const rows = await this.prisma.escalation.findMany({
       where: {
+        category: 'DOCUMENT_REQUEST',
         ...(query.status ? { status: query.status } : {}),
+        ...(documentType ? { documentType: documentType.id } : {}),
         AND: [
-          { OR: [structuredDocumentFilter, legacyDocumentFilter] },
           ...(cursor
             ? [
                 {
@@ -131,8 +110,8 @@ export class DashboardHrRequestsService {
   }
 
   async getById(id: string) {
-    const escalation = await this.prisma.escalation.findUnique({
-      where: { id },
+    const escalation = await this.prisma.escalation.findFirst({
+      where: { id, category: 'DOCUMENT_REQUEST' },
       include: {
         employee: {
           select: {
@@ -166,7 +145,7 @@ export class DashboardHrRequestsService {
       },
     });
 
-    if (!escalation || !this.isDocumentRequest(escalation)) {
+    if (!escalation) {
       throw new NotFoundException('HR document request not found.');
     }
 
@@ -174,14 +153,13 @@ export class DashboardHrRequestsService {
   }
 
   private toView(row: any) {
-    const derived = this.parseDocumentType(row.reason);
     const structured = this.findDocumentType(row.documentType);
 
     return {
       id: row.id,
-      category: row.category ?? (derived ? 'DOCUMENT_REQUEST' : null),
-      documentType: structured?.id ?? derived?.id ?? null,
-      documentLabel: structured?.label ?? derived?.label ?? 'Other HR Document',
+      category: row.category,
+      documentType: row.documentType,
+      documentLabel: structured?.label ?? null,
       reason: row.reason,
       status: row.status,
       resolutionNote: row.resolutionNote,
@@ -193,19 +171,6 @@ export class DashboardHrRequestsService {
     };
   }
 
-  private isDocumentRequest(row: { category?: string | null; documentType?: string | null; reason: string }) {
-    return (
-      row.category === 'DOCUMENT_REQUEST' ||
-      row.documentType !== null && row.documentType !== undefined ||
-      row.reason.trim().startsWith(DOCUMENT_REQUEST_PREFIX)
-    );
-  }
-
-  private parseDocumentType(reason: string) {
-    const value = reason.trim().slice(DOCUMENT_REQUEST_PREFIX.length).trim();
-    return DOCUMENT_TYPES.find((type) => type.label === value);
-  }
-
   private findDocumentType(value?: string | null) {
     if (!value) return undefined;
     return DOCUMENT_TYPES.find((type) => type.id === value);
@@ -213,11 +178,9 @@ export class DashboardHrRequestsService {
 
   private resolveDocumentType(value: string) {
     const normalized = value.trim().toLowerCase();
-    const documentType = DOCUMENT_TYPES.find(
-      (type) => type.id === normalized || type.label.toLowerCase() === normalized,
-    );
+    const documentType = DOCUMENT_TYPES.find((type) => type.id === normalized);
 
-    if (!documentType) {
+    if (!documentType || !HR_DOCUMENT_REQUEST_TYPES.includes(documentType.id as (typeof HR_DOCUMENT_REQUEST_TYPES)[number])) {
       throw new BadRequestException('Invalid documentType.');
     }
 
