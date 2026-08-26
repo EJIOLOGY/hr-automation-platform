@@ -5,19 +5,16 @@ import {
   Param,
   Post,
   Query,
-  Req,
   UseGuards,
 } from '@nestjs/common';
-import { EscalationStatus } from '../../generated/prisma/enums';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DashboardEscalationsService } from './dashboard-escalations.service';
-import { EscalationActionDto } from './dashboard-escalations.dto';
-
-interface AuthenticatedRequest {
-  user: {
-    id: string;
-  };
-}
+import {
+  EscalationActionDto,
+  EscalationListQueryDto,
+} from './dashboard-escalations.dto';
 
 @Controller('dashboard/escalations')
 @UseGuards(JwtAuthGuard)
@@ -25,21 +22,8 @@ export class DashboardEscalationsController {
   constructor(private readonly service: DashboardEscalationsService) {}
 
   @Get()
-  list(
-    @Query('status') status?: EscalationStatus,
-    @Query('category') category?: string,
-    @Query('documentType') documentType?: string,
-    @Query('cursor') cursor?: string,
-    @Query('limit') limit?: string,
-  ) {
-    const parsedLimit = limit === undefined ? undefined : Number(limit);
-    return this.service.list({
-      status,
-      category,
-      documentType,
-      cursor,
-      limit: parsedLimit,
-    });
+  list(@Query() query: EscalationListQueryDto) {
+    return this.service.list(query);
   }
 
   @Get(':id')
@@ -48,18 +32,18 @@ export class DashboardEscalationsController {
   }
 
   @Post(':id/claim')
-  claim(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
-    return this.service.claim(id, { hrOfficerId: request.user.id });
+  claim(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.claim(id, { hrOfficerId: user.id });
   }
 
   @Post(':id/resolve')
   resolve(
     @Param('id') id: string,
-    @Req() request: AuthenticatedRequest,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() body: EscalationActionDto,
   ) {
     return this.service.resolve(id, {
-      hrOfficerId: request.user.id,
+      hrOfficerId: user.id,
       resolutionNote: body.resolutionNote,
     });
   }
@@ -67,11 +51,11 @@ export class DashboardEscalationsController {
   @Post(':id/close')
   close(
     @Param('id') id: string,
-    @Req() request: AuthenticatedRequest,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() body: EscalationActionDto,
   ) {
     return this.service.close(id, {
-      hrOfficerId: request.user.id,
+      hrOfficerId: user.id,
       resolutionNote: body.resolutionNote,
     });
   }
