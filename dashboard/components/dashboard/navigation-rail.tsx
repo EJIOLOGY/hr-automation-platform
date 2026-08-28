@@ -41,11 +41,11 @@ export function NavigationRail() {
     >
       <div className="flex min-h-2 items-center justify-center rounded-xl bg-white px-3 py-3">
         <Image
-          src="/icon/intertech-icon.png"
+          src="/icon/intertech-icon-noBg.png"
           alt="InterTech Systems"
           width={50}
           height={50}
-          className="h-auto w-full max-w-full object-contain shadow-5xl"
+          className="h-22 w-auto max-w-full object-contain shadow-5xl"
           priority
         />
       </div>
