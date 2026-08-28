@@ -45,7 +45,7 @@ export function NavigationRail() {
           alt="InterTech Systems"
           width={50}
           height={50}
-          className="h-22 w-auto max-w-full object-contain shadow-5xl"
+          className="h-20 w-auto max-w-full object-contain shadow-5xl"
           priority
         />
       </div>
@@ -59,7 +59,7 @@ export function NavigationRail() {
               href={href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-medium leading-3 text-white/80 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70",
+                "flex min-h-17 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[12px] font-semibold leading-3 text-white/80 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70",
                 isActive &&
                   "bg-white/20 text-white shadow-sm ring-1 ring-white/10 hover:bg-white/20 hover:text-white",
               )}
