@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { NavigationRail } from "./navigation-rail";
+import { SecondaryWorkspace } from "./secondary-workspace";
 
 interface AppShellProps {
   children: ReactNode;
@@ -13,12 +14,10 @@ export function AppShell({ children }: AppShellProps) {
         className="border border-dashed bg-card p-4 max-[760px]:hidden"
         aria-label="Workspace list"
       >
-        <div className="flex h-full flex-col rounded-xl bg-muted/30 p-5">
-          <p className="text-sm font-medium">Workspace</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Select a section to view its operational list.
-          </p>
-        </div>
+        <SecondaryWorkspace
+          title="Workspace"
+          description="Select a section to view its operational list."
+        />
       </aside>
       <section className="min-w-0 bg-card" aria-label="Active workspace">
         {children}
