@@ -5,6 +5,7 @@ import {
   ClipboardList,
   MessageSquareText,
   TriangleAlert,
+  ChevronDown,
   UserRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -35,16 +36,16 @@ export function NavigationRail() {
 
   return (
     <nav
-      className="flex min-h-dvh flex-col border-r bg-nav px-3 py-4"
+      className="flex min-h-dvh flex-col border border-dashed border-white/10 bg-brand-blue px-3 py-4 text-white"
       aria-label="Primary navigation"
     >
-      <div className="flex h-12 items-center justify-center">
+      <div className="flex min-h-24 items-center justify-center rounded-xl bg-white px-3 py-3">
         <Image
           src="/Intertech Logo.png"
           alt="InterTech Systems"
           width={128}
-          height={48}
-          className="h-auto w-full max-w-32 object-contain"
+          height={50}
+          className="h-auto w-full max-w-full object-contain shadow-5xl"
           priority
         />
       </div>
@@ -58,9 +59,9 @@ export function NavigationRail() {
               href={href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-[10px] font-medium leading-3 text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                "flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-medium leading-3 text-white/80 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70",
                 isActive &&
-                  "bg-brand-blue text-primary-foreground shadow-sm hover:text-primary-foreground",
+                  "bg-white/20 text-white shadow-sm ring-1 ring-white/10 hover:bg-white/20 hover:text-white",
               )}
             >
               <Icon className="size-4.5" aria-hidden="true" />
@@ -69,16 +70,30 @@ export function NavigationRail() {
           );
         })}
       </div>
-      <div className="mt-auto border-t pt-3">
-        <div
-          className="flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-center text-[10px] leading-3 text-muted-foreground"
-          aria-label="HR Officer account"
+      <div className="mt-auto border-t border-white/15 px-1 pt-4">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-white transition-colors hover:bg-white/10"
         >
-          <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
-            <UserRound className="size-4" aria-hidden="true" />
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-lg font-semibold text-brand-blue">
+            TG
           </span>
-          <span className="font-medium text-foreground">HR Officer</span>
-        </div>
+
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">
+              HR Officer
+            </span>
+
+            <span className="block text-xs text-white/75">Administrator</span>
+
+            <span className="mt-0.5 flex items-center gap-1.5 text-xs text-white/80">
+              <span className="size-2 rounded-full bg-success" />
+              Online
+            </span>
+          </span>
+
+          <ChevronDown className="size-4 shrink-0 text-white/80" />
+        </button>
       </div>
     </nav>
   );

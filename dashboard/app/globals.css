@@ -147,7 +147,14 @@
   --brand-blue-deep: #0057b8;
   --brand-blue-sky: #2498e3;
 
-  --brand-blue-gradient: linear-gradient(135deg, #0057b8 0%, #2498e3 100%);
+  --brand-blue-gradient: linear-gradient(
+    140deg,
+    #2498e3 0%,
+    #087fd1 28%,
+    #0057b8 58%,
+    #119ccf 82%,
+    #16b5c4 100%
+  );
 
   /*
    * SECONDARY BRAND GRADIENT
