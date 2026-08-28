@@ -10,7 +10,7 @@ export function AppShell({ children }: AppShellProps) {
     <main className="grid min-h-dvh grid-cols-[10.5rem_minmax(17rem,22rem)_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]">
       <NavigationRail />
       <aside
-        className="border-r bg-card p-4 max-[760px]:hidden"
+        className="border border-dashed bg-card p-4 max-[760px]:hidden"
         aria-label="Workspace list"
       >
         <div className="flex h-full flex-col rounded-xl border border-dashed bg-muted/30 p-5">

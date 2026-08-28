@@ -36,7 +36,7 @@ export function NavigationRail() {
 
   return (
     <nav
-      className="flex min-h-dvh flex-col border border-dashed border-white/10 bg-brand-blue px-3 py-4 text-white"
+      className="flex min-h-dvh flex-col border-r bg-brand-blue px-3 py-4 text-white"
       aria-label="Primary navigation"
     >
       <div className="flex min-h-2 items-center justify-center rounded-xl bg-white px-3 py-3">
