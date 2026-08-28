@@ -123,7 +123,7 @@ function KpiCard({
   tone,
 }: (typeof kpis)[number]) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+    <div className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div
           className={`flex size-10 shrink-0 items-center justify-center rounded-full ${
@@ -133,18 +133,14 @@ function KpiCard({
           <Icon className="size-5" />
         </div>
       </div>
-
       <p className="mt-4 text-xs font-medium text-muted-foreground">{label}</p>
-
       <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
         {value}
       </p>
-
       <p className="mt-2 text-[10px] text-muted-foreground">
         <span className="font-semibold text-emerald-600">↑ {change}</span>{" "}
         {comparison}
       </p>
-
       <div className="mt-4 flex h-7 items-end gap-1">
         {[28, 42, 32, 52, 38, 58, 45, 62, 48, 35, 50, 42].map(
           (height, index) => (
@@ -210,7 +206,8 @@ export function AnalyticsWorkspace() {
         </div>
 
         {/* KPI cards */}
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+        <section className="grid grid-cols-6 gap-3">
+          {" "}
           {kpis.map((kpi) => (
             <KpiCard key={kpi.label} {...kpi} />
           ))}
