@@ -4,14 +4,17 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   applicationName: "HR Operations",
   title: { default: "HR Operations", template: "%s | HR Operations" },
   description: "HR operations workspace for conversations and requests.",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg", apple: "/icon.svg" },
+  icons: {
+    icon: "/icon/intertech-icon.svg",
+    apple: "/icon/intertech-icon.svg",
+  },
 };
 
 export const viewport: Viewport = {

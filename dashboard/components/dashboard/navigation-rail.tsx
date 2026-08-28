@@ -39,11 +39,11 @@ export function NavigationRail() {
       className="flex min-h-dvh flex-col border border-dashed border-white/10 bg-brand-blue px-3 py-4 text-white"
       aria-label="Primary navigation"
     >
-      <div className="flex min-h-24 items-center justify-center rounded-xl bg-white px-3 py-3">
+      <div className="flex min-h-2 items-center justify-center rounded-xl bg-white px-3 py-3">
         <Image
-          src="/Intertech Logo.png"
+          src="/icon/intertech-icon.png"
           alt="InterTech Systems"
-          width={128}
+          width={50}
           height={50}
           className="h-auto w-full max-w-full object-contain shadow-5xl"
           priority
@@ -70,12 +70,12 @@ export function NavigationRail() {
           );
         })}
       </div>
-      <div className="mt-auto border-t border-white/15 px-1 pt-4">
+      <div className="mt-auto border-t border-white/15 pt-4">
         <button
           type="button"
-          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-white transition-colors hover:bg-white/10"
+          className="flex w-full items-center gap-2 rounded-xl py-2 text-left text-white transition-colors hover:bg-white/10"
         >
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-lg font-semibold text-brand-blue">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-base font-semibold text-brand-blue">
             TG
           </span>
 
@@ -84,15 +84,17 @@ export function NavigationRail() {
               HR Officer
             </span>
 
-            <span className="block text-xs text-white/75">Administrator</span>
+            <span className="block truncate text-xs text-white/75">
+              Administrator
+            </span>
 
             <span className="mt-0.5 flex items-center gap-1.5 text-xs text-white/80">
-              <span className="size-2 rounded-full bg-success" />
+              <span className="size-2 shrink-0 rounded-full bg-success" />
               Online
             </span>
           </span>
 
-          <ChevronDown className="size-4 shrink-0 text-white/80" />
+          <ChevronDown className="size-3.5 shrink-0 text-white/80" />
         </button>
       </div>
     </nav>
