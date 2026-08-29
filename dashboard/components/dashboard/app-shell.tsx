@@ -17,8 +17,8 @@ export function AppShell({ children }: AppShellProps) {
     <main
       className={
         isAnalytics
-          ? "grid min-h-dvh grid-cols-[10.5rem_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
-          : "grid min-h-dvh grid-cols-[10.5rem_minmax(17rem,22rem)_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
+          ? "grid min-h-dvh grid-cols-[8.7rem_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
+          : "grid min-h-dvh grid-cols-[8.7rem_minmax(17rem,22rem)_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
       }
     >
       <NavigationRail />

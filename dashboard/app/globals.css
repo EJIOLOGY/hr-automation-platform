@@ -121,6 +121,7 @@
    * RADIUS
    * ========================================================== */
 
+  --radius-xm: calc(var(--radius) * 0.3);
   --radius-xs: calc(var(--radius) * 0.5);
   --radius-sm: calc(var(--radius) * 0.65);
   --radius-md: calc(var(--radius) * 0.8);

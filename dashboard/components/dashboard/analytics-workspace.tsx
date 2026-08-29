@@ -161,7 +161,7 @@ export function AnalyticsWorkspace() {
     <div className="flex h-full min-h-dvh flex-col overflow-y-auto bg-[#f7f9fc]">
       <div className="space-y-4 p-5">
         {/* Header */}
-        <header className="flex flex-wrap items-center justify-between gap-4">
+        <header className="flex items-start justify-between gap-6">
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold text-foreground">
@@ -174,25 +174,20 @@ export function AnalyticsWorkspace() {
             </div>
 
             <p className="mt-1 text-xs text-muted-foreground">
-              Monitor employee conversations, HR service usage, escalations, and
-              chatbot performance.
+              Monitor employee conversations, HR usage, escalations, and chatbot
+              performance.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <FilterButton icon={CalendarDays}>
               May 22 – Jun 20, 2025
             </FilterButton>
-
             <FilterButton icon={Users}>All Departments</FilterButton>
-
             <FilterButton icon={Grid2X2}>All Services</FilterButton>
-
             <button className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-xs font-medium shadow-sm">
               <RefreshCw className="size-4" />
               Refresh
             </button>
-
             <button className="flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground shadow-sm">
               <Download className="size-4" />
               Export
@@ -200,9 +195,9 @@ export function AnalyticsWorkspace() {
           </div>
         </header>
 
-        <div className="flex justify-end text-[10px] text-muted-foreground">
+        <div className="flex flex-row items-center justify-end text-[10px] text-muted-foreground">
           Last updated: 2 min ago
-          <span className="ml-1 mt-0.5 size-1.5 rounded-full bg-emerald-500" />
+          <span className="ml-1 size-1.5 rounded-full bg-emerald-500" />
         </div>
 
         {/* KPI cards */}
@@ -359,7 +354,7 @@ export function AnalyticsWorkspace() {
             </div>
 
             <div className="mt-6 flex justify-center">
-              <div className="flex size-36 items-center justify-center rounded-full border-[18px] border-primary">
+              <div className="flex size-36 items-center justify-center rounded-full border-18 border-primary">
                 <div className="text-center">
                   <p className="text-lg font-semibold">2,328</p>
                   <p className="text-[9px] text-muted-foreground">Total</p>
@@ -398,7 +393,7 @@ export function AnalyticsWorkspace() {
             <h3 className="text-sm font-semibold">Top Conversation Paths</h3>
 
             <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-[480px] text-left text-[9px]">
+              <table className="w-full min-w-120 text-left text-[9px]">
                 <thead className="border-b text-muted-foreground">
                   <tr>
                     <th className="pb-2 font-medium">Conversation Path</th>
