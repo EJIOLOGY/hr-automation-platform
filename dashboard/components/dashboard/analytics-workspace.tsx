@@ -149,14 +149,14 @@ function EscalationTooltip({
 
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
-      <div className="flex items-center gap-2 text-[10px]">
+      <div className="flex items-center gap-2 text-xs">
         <span
           className="size-1.5 rounded-full"
           style={{ background: item?.color }}
         />
         <span className="font-semibold text-foreground">{entry.name}</span>
       </div>
-      <p className="mt-1 text-[10px] text-muted-foreground">
+      <p className="mt-1 text-xs text-muted-foreground">
         {entry.value} conversations ({item?.percentage})
       </p>
     </div>
@@ -268,15 +268,12 @@ function ActivityTooltip({
 
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
-      <p className="text-[10px] font-semibold text-foreground">{label}</p>
+      <p className="text-xs font-semibold text-foreground">{label}</p>
       <div className="mt-1.5 space-y-1">
         {payload.map((entry) => {
           const series = activitySeries.find((s) => s.name === entry.name);
           return (
-            <div
-              key={entry.name}
-              className="flex items-center gap-2 text-[10px]"
-            >
+            <div key={entry.name} className="flex items-center gap-2 text-xs">
               <span
                 className="size-1.5 rounded-full"
                 style={{ background: series?.color }}
@@ -346,7 +343,7 @@ function KpiCard({
       <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
         {value}
       </p>
-      <p className="mt-2 text-[10px] text-muted-foreground">
+      <p className="mt-2 text-xs text-muted-foreground">
         <span className="font-semibold text-emerald-600">↑ {change}</span>{" "}
         {comparison}
       </p>
@@ -427,26 +424,25 @@ export function AnalyticsWorkspace() {
           </div>
         </header>
 
-        <div className="flex flex-row items-center justify-end text-[10px] text-muted-foreground">
+        <div className="flex flex-row items-center justify-end text-xs text-muted-foreground">
           Last updated: 2 min ago
           <span className="ml-1 size-1.5 rounded-full bg-emerald-500" />
         </div>
 
         {/* KPI cards */}
-        <section className="grid grid-cols-6 gap-3">
-          {" "}
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           {kpis.map((kpi) => (
             <KpiCard key={kpi.label} {...kpi} />
           ))}
         </section>
 
         {/* Conversation Activity + Services */}
-        <section className="grid gap-3 xl:grid-cols-[1.65fr_1fr]">
+        <section className="grid gap-3 lg:grid-cols-[1.65fr_1fr]">
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">Conversation Activity</h3>
-                <div className="mt-3 flex gap-4 text-[10px] text-muted-foreground">
+                <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
                   {activitySeries.map((series) => (
                     <span
                       key={series.key}
@@ -521,7 +517,7 @@ export function AnalyticsWorkspace() {
                     tickLine={false}
                     interval="preserveStartEnd"
                     tick={{
-                      fontSize: 9,
+                      fontSize: 11,
                       fill: "var(--color-muted-foreground)",
                     }}
                     tickMargin={10}
@@ -532,7 +528,7 @@ export function AnalyticsWorkspace() {
                     tickLine={false}
                     width={32}
                     tick={{
-                      fontSize: 9,
+                      fontSize: 11,
                       fill: "var(--color-muted-foreground)",
                     }}
                   />
@@ -562,7 +558,6 @@ export function AnalyticsWorkspace() {
               </ResponsiveContainer>
             </div>
           </div>
-
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Most Used HR Services</h3>
@@ -594,7 +589,7 @@ export function AnalyticsWorkspace() {
         </section>
 
         {/* Lower analytics */}
-        <section className="grid gap-3 xl:grid-cols-[1.35fr_0.85fr_1.3fr]">
+        <section className="grid gap-3 lg:grid-cols-[1.35fr_0.85fr] xl:grid-cols-[1.35fr_0.85fr_1.3fr]">
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h3 className="text-sm font-semibold">Conversation Journey</h3>
 
@@ -605,17 +600,15 @@ export function AnalyticsWorkspace() {
                     {index + 1}
                   </div>
 
-                  <p className="mt-2 text-[9px] font-medium leading-3">
+                  <p className="mt-2 text-xs font-medium leading-snug">
                     {label}
                   </p>
 
                   <p className="mt-2 text-sm font-semibold">{value}</p>
-                  <p className="text-[9px] text-muted-foreground">
-                    {percentage}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{percentage}</p>
 
                   {index < journey.length - 1 ? (
-                    <p className="mt-2 text-[9px] text-red-500">Drop-off</p>
+                    <p className="mt-2 text-xs text-red-500">Drop-off</p>
                   ) : null}
                 </div>
               ))}
@@ -623,7 +616,7 @@ export function AnalyticsWorkspace() {
 
             <div className="mt-6 grid grid-cols-2 border-t pt-4">
               <div>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Conversion to Bot Completion
                 </p>
                 <p className="mt-1 text-xl font-semibold text-emerald-600">
@@ -632,14 +625,13 @@ export function AnalyticsWorkspace() {
               </div>
 
               <div className="text-right">
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Conversion to Escalation
                 </p>
                 <p className="mt-1 text-xl font-semibold text-red-500">18.6%</p>
               </div>
             </div>
           </div>
-
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Escalation Analytics</h3>
@@ -672,12 +664,12 @@ export function AnalyticsWorkspace() {
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-lg font-semibold">2,328</p>
-                  <p className="text-[9px] text-muted-foreground">Total</p>
+                  <p className="text-xs text-muted-foreground">Total</p>
                 </div>
               </div>
             </div>
 
-            <div className="mt-5 space-y-2 text-[10px]">
+            <div className="mt-5 space-y-2 text-sm">
               {escalationBreakdown.map((entry) => (
                 <div
                   key={entry.name}
@@ -698,18 +690,17 @@ export function AnalyticsWorkspace() {
             </div>
 
             <div className="mt-5 border-t pt-4">
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Avg. Escalations / Day
               </p>
               <p className="mt-1 text-xl font-semibold">77</p>
             </div>
           </div>
-
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h3 className="text-sm font-semibold">Top Conversation Paths</h3>
 
             <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-120 text-left text-[9px]">
+              <table className="w-full min-w-120 text-left text-sm">
                 <thead className="border-b text-muted-foreground">
                   <tr>
                     <th className="pb-2 font-medium">Conversation Path</th>
@@ -744,7 +735,7 @@ export function AnalyticsWorkspace() {
               </table>
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-[9px] text-muted-foreground">
+            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
               <span>Showing 1 to 5 of 5 entries</span>
               <div className="flex gap-1">
                 <button className="rounded border px-2 py-1">‹</button>
