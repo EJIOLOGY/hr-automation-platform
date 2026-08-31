@@ -6,7 +6,6 @@ import {
   MessageSquareText,
   TriangleAlert,
   ChevronDown,
-  UserRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -36,7 +35,7 @@ export function NavigationRail() {
 
   return (
     <nav
-      className="flex min-h-dvh flex-col border border-dashed rounded border-white/10 bg-brand-blue px-3 py-4 text-white"
+      className="flex h-dvh flex-col border border-dashed rounded border-white/10 bg-brand-blue px-3 py-4 text-white"
       aria-label="Primary navigation"
     >
       <div className="flex min-h-2 items-center justify-center rounded-xl bg-white px-3 py-3">

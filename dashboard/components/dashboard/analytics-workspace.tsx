@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Bot,
@@ -12,6 +13,35 @@ import {
   Timer,
   Users,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { TooltipContentProps } from "recharts";
+import type {
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
+
+const toneColors = {
+  blue: "#0057b8",
+  teal: "#19b5ae",
+  green: "#059669",
+  red: "var(--color-danger)",
+  purple: "#7c3aed",
+  coral: "#f97316",
+};
 
 const kpis = [
   {
@@ -21,6 +51,7 @@ const kpis = [
     comparison: "vs May 21 – Jun 19",
     icon: MessageSquare,
     tone: "blue",
+    trend: [72, 78, 74, 82, 88, 84, 92, 96, 90, 100, 104, 110],
   },
   {
     label: "Active Employees",
@@ -29,6 +60,7 @@ const kpis = [
     comparison: "vs May 21 – Jun 19",
     icon: Users,
     tone: "teal",
+    trend: [58, 60, 59, 63, 66, 64, 70, 74, 72, 78, 82, 86],
   },
   {
     label: "Bot Resolution Rate",
@@ -37,6 +69,7 @@ const kpis = [
     comparison: "vs May 21 – Jun 19",
     icon: Bot,
     tone: "green",
+    trend: [60, 62, 64, 63, 66, 68, 70, 69, 72, 74, 73, 76],
   },
   {
     label: "Escalation Rate",
@@ -45,6 +78,7 @@ const kpis = [
     comparison: "vs May 21 – Jun 19",
     icon: AlertTriangle,
     tone: "red",
+    trend: [15, 14, 16, 15, 17, 16, 18, 17, 19, 18, 20, 19],
   },
   {
     label: "Average First Response",
@@ -53,6 +87,7 @@ const kpis = [
     comparison: "vs May 21 – Jun 19",
     icon: Timer,
     tone: "purple",
+    trend: [50, 55, 52, 58, 60, 57, 63, 65, 62, 68, 70, 74],
   },
   {
     label: "HR Escalations",
@@ -61,6 +96,7 @@ const kpis = [
     comparison: "vs May 21 – Jun 19",
     icon: Users,
     tone: "coral",
+    trend: [70, 74, 72, 78, 80, 77, 83, 85, 82, 88, 90, 94],
   },
 ];
 
@@ -81,6 +117,59 @@ const journey = [
   ["Escalated to HR", "295", "18.6%"],
 ];
 
+const escalationBreakdown = [
+  { name: "Talk to HR", value: 752, percentage: "32.3%", color: "#0057b8" },
+  {
+    name: "Unrecognized Input",
+    value: 684,
+    percentage: "29.4%",
+    color: "#19b5ae",
+  },
+  {
+    name: "Workflow Requires HR",
+    value: 612,
+    percentage: "26.3%",
+    color: "#7c3aed",
+  },
+  {
+    name: "Other / System Issue",
+    value: 280,
+    percentage: "12.0%",
+    color: "var(--color-danger)",
+  },
+];
+
+function EscalationTooltip({
+  active,
+  payload,
+}: TooltipContentProps<ValueType, NameType>) {
+  if (!active || !payload?.length) return null;
+  const entry = payload[0];
+  const item = escalationBreakdown.find((e) => e.name === entry.name);
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
+      <div className="flex items-center gap-2 text-[10px]">
+        <span
+          className="size-1.5 rounded-full"
+          style={{ background: item?.color }}
+        />
+        <span className="font-semibold text-foreground">{entry.name}</span>
+      </div>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        {entry.value} conversations ({item?.percentage})
+      </p>
+    </div>
+  );
+}
+
+const funnelData = journey.map(([label, value, percentage], index) => ({
+  label,
+  value: Number(value.replace(/,/g, "")),
+  percentage,
+  isEscalation: index === journey.length - 1,
+}));
+
 const paths = [
   ["Main Menu → Leave Balance", "396", "94.2%", "5.8%", "1m 38s"],
   ["Main Menu → Policy FAQ", "336", "91.6%", "8.4%", "1m 22s"],
@@ -88,6 +177,121 @@ const paths = [
   ["Main Menu → HR Document Requests", "168", "78.1%", "21.9%", "2m 12s"],
   ["Main Menu → Talk to HR", "114", "22.7%", "77.3%", "3m 05s"],
 ];
+
+type ActivityPoint = {
+  label: string;
+  conversations: number;
+  completed: number;
+  escalated: number;
+};
+
+const activityDaily: ActivityPoint[] = [
+  { label: "May 22", conversations: 34, completed: 24, escalated: 6 },
+  { label: "May 23", conversations: 38, completed: 27, escalated: 7 },
+  { label: "May 24", conversations: 31, completed: 22, escalated: 6 },
+  { label: "May 25", conversations: 29, completed: 21, escalated: 5 },
+  { label: "May 26", conversations: 42, completed: 30, escalated: 8 },
+  { label: "May 27", conversations: 47, completed: 34, escalated: 9 },
+  { label: "May 28", conversations: 45, completed: 33, escalated: 8 },
+  { label: "May 29", conversations: 51, completed: 38, escalated: 9 },
+  { label: "May 30", conversations: 49, completed: 36, escalated: 10 },
+  { label: "May 31", conversations: 54, completed: 40, escalated: 10 },
+  { label: "Jun 1", conversations: 58, completed: 43, escalated: 11 },
+  { label: "Jun 2", conversations: 56, completed: 41, escalated: 12 },
+  { label: "Jun 3", conversations: 61, completed: 46, escalated: 12 },
+  { label: "Jun 4", conversations: 64, completed: 48, escalated: 13 },
+  { label: "Jun 5", conversations: 60, completed: 45, escalated: 12 },
+  { label: "Jun 6", conversations: 67, completed: 51, escalated: 14 },
+  { label: "Jun 7", conversations: 71, completed: 54, escalated: 15 },
+  { label: "Jun 8", conversations: 69, completed: 52, escalated: 14 },
+  { label: "Jun 9", conversations: 74, completed: 56, escalated: 16 },
+  { label: "Jun 10", conversations: 78, completed: 60, escalated: 16 },
+  { label: "Jun 11", conversations: 76, completed: 58, escalated: 17 },
+  { label: "Jun 12", conversations: 81, completed: 62, escalated: 18 },
+  { label: "Jun 13", conversations: 85, completed: 65, escalated: 19 },
+  { label: "Jun 14", conversations: 83, completed: 63, escalated: 18 },
+  { label: "Jun 15", conversations: 88, completed: 68, escalated: 20 },
+  { label: "Jun 16", conversations: 92, completed: 71, escalated: 21 },
+  { label: "Jun 17", conversations: 90, completed: 69, escalated: 20 },
+  { label: "Jun 18", conversations: 95, completed: 73, escalated: 22 },
+  { label: "Jun 19", conversations: 98, completed: 76, escalated: 23 },
+  { label: "Jun 20", conversations: 94, completed: 72, escalated: 22 },
+];
+
+const activityWeekly: ActivityPoint[] = [
+  { label: "Wk of May 22", conversations: 210, completed: 158, escalated: 41 },
+  { label: "Wk of May 29", conversations: 268, completed: 202, escalated: 53 },
+  { label: "Wk of Jun 5", conversations: 314, completed: 240, escalated: 66 },
+  { label: "Wk of Jun 12", conversations: 356, completed: 274, escalated: 80 },
+  { label: "Wk of Jun 19", conversations: 100, completed: 79, escalated: 23 },
+];
+
+const activityMonthly: ActivityPoint[] = [
+  { label: "Jan", conversations: 812, completed: 598, escalated: 168 },
+  { label: "Feb", conversations: 874, completed: 641, escalated: 179 },
+  { label: "Mar", conversations: 940, completed: 702, escalated: 186 },
+  { label: "Apr", conversations: 1026, completed: 774, escalated: 201 },
+  { label: "May", conversations: 1108, completed: 838, escalated: 214 },
+  { label: "Jun", conversations: 1248, completed: 953, escalated: 232 },
+];
+
+const activityPeriods = [
+  { key: "daily" as const, label: "Daily", data: activityDaily },
+  { key: "weekly" as const, label: "Weekly", data: activityWeekly },
+  { key: "monthly" as const, label: "Monthly", data: activityMonthly },
+];
+
+const activitySeries = [
+  {
+    key: "conversations" as const,
+    name: "Conversations",
+    color: "var(--chart-1)",
+  },
+  {
+    key: "completed" as const,
+    name: "Completed (Bot)",
+    color: "var(--chart-3)",
+  },
+  {
+    key: "escalated" as const,
+    name: "Escalated to HR",
+    color: "var(--color-danger)",
+  },
+];
+
+function ActivityTooltip({
+  active,
+  payload,
+  label,
+}: TooltipContentProps<ValueType, NameType>) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
+      <p className="text-[10px] font-semibold text-foreground">{label}</p>
+      <div className="mt-1.5 space-y-1">
+        {payload.map((entry) => {
+          const series = activitySeries.find((s) => s.name === entry.name);
+          return (
+            <div
+              key={entry.name}
+              className="flex items-center gap-2 text-[10px]"
+            >
+              <span
+                className="size-1.5 rounded-full"
+                style={{ background: series?.color }}
+              />
+              <span className="text-muted-foreground">{entry.name}</span>
+              <span className="ml-auto font-semibold text-foreground">
+                {entry.value}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 const toneClasses = {
   blue: "bg-blue-50 text-blue-600",
@@ -121,7 +325,12 @@ function KpiCard({
   comparison,
   icon: Icon,
   tone,
+  trend,
 }: (typeof kpis)[number]) {
+  const sparkId = `kpi-spark-${label.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`;
+  const color = toneColors[tone as keyof typeof toneColors];
+  const data = trend.map((v, i) => ({ i, v }));
+
   return (
     <div className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -141,22 +350,45 @@ function KpiCard({
         <span className="font-semibold text-emerald-600">↑ {change}</span>{" "}
         {comparison}
       </p>
-      <div className="mt-4 flex h-7 items-end gap-1">
-        {[28, 42, 32, 52, 38, 58, 45, 62, 48, 35, 50, 42].map(
-          (height, index) => (
-            <div
-              key={index}
-              className="w-1 rounded-t-sm bg-primary/60"
-              style={{ height: `${height}%` }}
+      <div className="mt-3 h-8 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={data}
+            margin={{ top: 2, right: 0, left: 0, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient id={sparkId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Area
+              type="monotone"
+              dataKey="v"
+              stroke={color}
+              strokeWidth={1.75}
+              fill={`url(#${sparkId})`}
+              dot={false}
+              isAnimationActive={false}
             />
-          ),
-        )}
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
 }
 
 export function AnalyticsWorkspace() {
+  const [activityPeriod, setActivityPeriod] =
+    useState<(typeof activityPeriods)[number]["key"]>("daily");
+
+  const activeActivity = useMemo(
+    () =>
+      activityPeriods.find((period) => period.key === activityPeriod) ??
+      activityPeriods[0],
+    [activityPeriod],
+  );
+
   return (
     <div className="flex h-full min-h-dvh flex-col overflow-y-auto bg-[#f7f9fc]">
       <div className="space-y-4 p-5">
@@ -215,58 +447,119 @@ export function AnalyticsWorkspace() {
               <div>
                 <h3 className="text-sm font-semibold">Conversation Activity</h3>
                 <div className="mt-3 flex gap-4 text-[10px] text-muted-foreground">
-                  <span>● Conversations</span>
-                  <span>● Completed (Bot)</span>
-                  <span>● Escalated to HR</span>
+                  {activitySeries.map((series) => (
+                    <span
+                      key={series.key}
+                      className="flex items-center gap-1.5"
+                    >
+                      <span
+                        className="size-1.5 rounded-full"
+                        style={{ background: series.color }}
+                      />
+                      {series.name}
+                    </span>
+                  ))}
                 </div>
               </div>
 
               <div className="flex rounded-lg border border-border p-0.5 text-xs">
-                <button className="rounded-md bg-primary/10 px-3 py-1.5 font-medium text-primary">
-                  Daily
-                </button>
-                <button className="px-3 py-1.5 text-muted-foreground">
-                  Weekly
-                </button>
-                <button className="px-3 py-1.5 text-muted-foreground">
-                  Monthly
-                </button>
+                {activityPeriods.map((period) => (
+                  <button
+                    key={period.key}
+                    onClick={() => setActivityPeriod(period.key)}
+                    className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                      activityPeriod === period.key
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {period.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="mt-5 flex h-48 items-end gap-1 border-b border-border px-2">
-              {Array.from({ length: 30 }).map((_, index) => (
-                <div key={index} className="flex flex-1 items-end gap-0.5">
-                  <div
-                    className="w-1/3 rounded-t bg-primary/80"
-                    style={{
-                      height: `${35 + ((index * 17) % 45)}%`,
-                    }}
-                  />
-                  <div
-                    className="w-1/3 rounded-t bg-teal-400/80"
-                    style={{
-                      height: `${20 + ((index * 13) % 35)}%`,
-                    }}
-                  />
-                  <div
-                    className="w-1/3 rounded-t bg-red-400/70"
-                    style={{
-                      height: `${8 + ((index * 7) % 18)}%`,
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
+            <div className="mt-5 h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={activeActivity.data}
+                  margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+                >
+                  <defs>
+                    {activitySeries.map((series) => (
+                      <linearGradient
+                        key={series.key}
+                        id={`fill-${series.key}`}
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor={series.color}
+                          stopOpacity={0.28}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor={series.color}
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    ))}
+                  </defs>
 
-            <div className="mt-2 flex justify-between text-[9px] text-muted-foreground">
-              <span>May 22</span>
-              <span>May 27</span>
-              <span>Jun 1</span>
-              <span>Jun 6</span>
-              <span>Jun 11</span>
-              <span>Jun 16</span>
-              <span>Jun 20</span>
+                  <CartesianGrid
+                    vertical={false}
+                    stroke="var(--color-border)"
+                    strokeDasharray="3 3"
+                  />
+
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    tick={{
+                      fontSize: 9,
+                      fill: "var(--color-muted-foreground)",
+                    }}
+                    tickMargin={10}
+                  />
+
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    width={32}
+                    tick={{
+                      fontSize: 9,
+                      fill: "var(--color-muted-foreground)",
+                    }}
+                  />
+
+                  <Tooltip
+                    content={(props) => <ActivityTooltip {...props} />}
+                    cursor={{
+                      stroke: "var(--color-border)",
+                      strokeWidth: 1,
+                    }}
+                  />
+
+                  {activitySeries.map((series) => (
+                    <Area
+                      key={series.key}
+                      type="monotone"
+                      dataKey={series.key}
+                      name={series.name}
+                      stroke={series.color}
+                      strokeWidth={2}
+                      fill={`url(#fill-${series.key})`}
+                      dot={false}
+                      activeDot={{ r: 3.5, strokeWidth: 0 }}
+                    />
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
@@ -353,8 +646,30 @@ export function AnalyticsWorkspace() {
               <button className="text-lg text-muted-foreground">⋮</button>
             </div>
 
-            <div className="mt-6 flex justify-center">
-              <div className="flex size-36 items-center justify-center rounded-full border-18 border-primary">
+            <div className="relative mt-4 h-40 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Tooltip
+                    content={(props) => <EscalationTooltip {...props} />}
+                  />
+                  <Pie
+                    data={escalationBreakdown}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={52}
+                    outerRadius={72}
+                    paddingAngle={2}
+                    cornerRadius={4}
+                    stroke="none"
+                  >
+                    {escalationBreakdown.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-lg font-semibold">2,328</p>
                   <p className="text-[9px] text-muted-foreground">Total</p>
@@ -363,22 +678,23 @@ export function AnalyticsWorkspace() {
             </div>
 
             <div className="mt-5 space-y-2 text-[10px]">
-              <div className="flex justify-between">
-                <span>Talk to HR</span>
-                <span>752 (32.3%)</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Unrecognized Input</span>
-                <span>684 (29.4%)</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Workflow Requires HR</span>
-                <span>612 (26.3%)</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Other / System Issue</span>
-                <span>280 (12.0%)</span>
-              </div>
+              {escalationBreakdown.map((entry) => (
+                <div
+                  key={entry.name}
+                  className="flex items-center justify-between"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{ background: entry.color }}
+                    />
+                    {entry.name}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {entry.value} ({entry.percentage})
+                  </span>
+                </div>
+              ))}
             </div>
 
             <div className="mt-5 border-t pt-4">
