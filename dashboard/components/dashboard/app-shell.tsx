@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AccountMenu } from "./account-menu";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -15,27 +15,28 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-
-  useEffect(() => {
-    setIsAccountMenuOpen(false);
-  }, [pathname]);
+  const [accountMenuPath, setAccountMenuPath] = useState<string | null>(null);
 
   const isAnalytics = pathname === "/dashboard/analytics";
   const isConversations = pathname === "/dashboard/conversations";
+  const showAccountMenu = accountMenuPath === pathname && !isAnalytics;
 
   const content = (
     <>
       <NavigationRail
-        isAccountMenuOpen={isAccountMenuOpen}
-        onAccountMenuToggle={() => setIsAccountMenuOpen((current) => !current)}
+        isAccountMenuOpen={showAccountMenu}
+        onAccountMenuToggle={() =>
+          setAccountMenuPath((current) =>
+            current === pathname ? null : pathname,
+          )
+        }
       />
 
       {!isAnalytics && (
         <aside className="min-h-0 overflow-hidden border border-dashed bg-card p-4 max-[760px]:hidden">
-          {isAccountMenuOpen ? (
+          {showAccountMenu ? (
             <div id="account-menu" className="h-full">
-              <AccountMenu onClose={() => setIsAccountMenuOpen(false)} />
+              <AccountMenu onClose={() => setAccountMenuPath(null)} />
             </div>
           ) : isConversations ? (
             <ConversationList />

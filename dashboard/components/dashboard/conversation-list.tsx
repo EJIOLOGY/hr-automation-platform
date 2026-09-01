@@ -82,10 +82,10 @@ function ConversationListItem({
   return (
     <button
       type="button"
-      onClick={() => selectConversation(conversation.id)}
+      onClick={() => selectConversation(conversation)}
       aria-pressed={isSelected}
       className={cn(
-        "flex w-full min-w-0 gap-3 border-b border-border px-1 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-inset",
+        "flex w-full min-w-0 gap-3 border-b border-border px-0 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-inset",
         isSelected && "bg-primary/8",
       )}
     >
@@ -268,7 +268,7 @@ export function ConversationList() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-color:#c4c4c4_transparent] scrollbar-thin [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#c4c4c4] [&::-webkit-scrollbar-thumb:hover]:bg-[#a8a8a8]">
         {conversations === null && !error ? <ConversationListSkeleton /> : null}
 
         {error ? (
