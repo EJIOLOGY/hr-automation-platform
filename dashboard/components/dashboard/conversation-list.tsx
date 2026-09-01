@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, MessageSquare, RefreshCw, Search } from "lucide-react";
 import { getConversations, type Conversation } from "@/lib/dashboard-api";
+import { ApiError } from "@/lib/auth-api";
+import { useAuth } from "@/components/auth/auth-provider";
 import { cn } from "@/lib/utils";
 import { useConversationSelection } from "./conversation-context";
 
@@ -109,24 +111,53 @@ export function ConversationList() {
   const [retryCount, setRetryCount] = useState(0);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ConversationFilter>("all");
+  const { accessToken, refreshAuth } = useAuth();
 
   useEffect(() => {
     let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setConversations(null);
     setError(false);
 
-    getConversations()
-      .then((response) => {
-        if (active) setConversations(response.items);
-      })
-      .catch(() => {
+    async function loadConversations() {
+      if (!accessToken) {
         if (active) setError(true);
-      });
+        return;
+      }
+
+      try {
+        const response = await getConversations(accessToken);
+        if (active) setConversations(response.items);
+      } catch (err) {
+        if (!active) return;
+
+        // Handle 401 unauthorized - refresh and retry
+        if (err instanceof ApiError && err.status === 401) {
+          try {
+            const newToken = await refreshAuth();
+            if (!active || !newToken) {
+              setError(true);
+              return;
+            }
+
+            // Retry with new token
+            const response = await getConversations(newToken);
+            if (active) setConversations(response.items);
+          } catch {
+            if (active) setError(true);
+          }
+        } else {
+          if (active) setError(true);
+        }
+      }
+    }
+
+    void loadConversations();
 
     return () => {
       active = false;
     };
-  }, [retryCount]);
+  }, [accessToken, refreshAuth, retryCount]);
 
   const visibleConversations = useMemo(() => {
     if (!conversations) return [];

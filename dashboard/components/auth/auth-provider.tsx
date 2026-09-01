@@ -24,6 +24,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshAuth: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -81,6 +82,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [accessToken]);
 
+  const refreshAuth = useCallback(async () => {
+    try {
+      const response = await refresh();
+
+      setAccessToken(response.accessToken);
+      setUser(response.user);
+
+      return response.accessToken;
+    } catch {
+      setAccessToken(null);
+      setUser(null);
+
+      return null;
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       accessToken,
@@ -89,8 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(accessToken && user),
       login,
       logout,
+      refreshAuth,
     }),
-    [accessToken, user, isLoading, login, logout],
+    [accessToken, user, isLoading, login, logout, refreshAuth],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -38,9 +38,10 @@ export interface ConversationListResponse {
 const dashboardApiUrl =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api/v1";
 
-export async function getConversations(): Promise<ConversationListResponse> {
+export async function getConversations(
+  accessToken: string,
+): Promise<ConversationListResponse> {
   const headers = new Headers({ Accept: "application/json" });
-  const accessToken = window.localStorage.getItem("hr_access_token");
 
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
@@ -50,6 +51,11 @@ export async function getConversations(): Promise<ConversationListResponse> {
     headers,
     credentials: "include",
   });
+
+  if (response.status === 401) {
+    const { ApiError } = await import("./auth-api");
+    throw new ApiError(401, "Unauthorized. Please log in again.");
+  }
 
   if (!response.ok) {
     throw new Error("Unable to load conversations.");
