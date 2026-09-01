@@ -54,10 +54,12 @@ function ConversationListSkeleton() {
       {Array.from({ length: 7 }, (_, index) => (
         <div key={index} className="flex gap-3 px-1 py-4">
           <div className="size-10 shrink-0 animate-pulse rounded-full bg-muted" />
+
           <div className="min-w-0 flex-1 space-y-2">
             <div className="h-3.5 w-3/5 animate-pulse rounded bg-muted" />
             <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
           </div>
+
           <div className="h-3 w-9 animate-pulse rounded bg-muted" />
         </div>
       ))}
@@ -72,6 +74,7 @@ function ConversationListItem({
 }) {
   const { selectedConversationId, selectConversation } =
     useConversationSelection();
+
   const unread = isUnread(conversation);
   const isSelected = selectedConversationId === conversation.id;
   const preview = conversation.latestMessage?.content || "No messages yet";
@@ -86,7 +89,7 @@ function ConversationListItem({
         isSelected && "bg-primary/8",
       )}
     >
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[14px] leading-none font-medium text-primary">
         {initials(conversation.employee.fullName)}
       </span>
 
@@ -94,26 +97,30 @@ function ConversationListItem({
         <span className="flex min-w-0 items-center gap-2">
           <span
             className={cn(
-              "min-w-0 flex-1 truncate text-sm",
+              "min-w-0 flex-1 truncate text-[15px] leading-5",
               unread ? "font-semibold" : "font-medium",
             )}
           >
             {conversation.employee.fullName}
           </span>
-          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+
+          <span className="shrink-0 text-[12px] leading-4 tabular-nums text-muted-foreground">
             {formatTimestamp(conversation.lastActivityAt)}
           </span>
         </span>
+
         <span className="mt-1 flex min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate text-[14px] leading-5 text-muted-foreground">
             {preview}
           </span>
+
           {conversation.activeEscalation ? (
             <AlertTriangle
               className="size-3.5 shrink-0 text-warning"
               aria-label="Escalated conversation"
             />
           ) : null}
+
           {unread ? (
             <span
               className="size-2 shrink-0 rounded-full bg-info"
@@ -138,6 +145,7 @@ export function ConversationList() {
 
   useEffect(() => {
     let active = true;
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConversations(null);
     setError(false);
@@ -150,7 +158,10 @@ export function ConversationList() {
 
       try {
         const response = await getConversations(accessToken);
-        if (active) setConversations(response.items);
+
+        if (active) {
+          setConversations(response.items);
+        }
       } catch (err) {
         if (!active) return;
 
@@ -158,6 +169,7 @@ export function ConversationList() {
         if (err instanceof ApiError && err.status === 401) {
           try {
             const newToken = await refreshAuth();
+
             if (!active || !newToken) {
               setError(true);
               return;
@@ -165,7 +177,10 @@ export function ConversationList() {
 
             // Retry with new token
             const response = await getConversations(newToken);
-            if (active) setConversations(response.items);
+
+            if (active) {
+              setConversations(response.items);
+            }
           } catch {
             if (active) setError(true);
           }
@@ -184,6 +199,7 @@ export function ConversationList() {
 
   const visibleConversations = useMemo(() => {
     if (!conversations) return [];
+
     const normalizedQuery = query.trim().toLocaleLowerCase();
 
     return conversations.filter((conversation) => {
@@ -194,6 +210,7 @@ export function ConversationList() {
           conversation.employee.employeeNumber,
           conversation.employee.phoneNumber,
         ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+
       const matchesFilter =
         filter === "all" ||
         (filter === "unread" && isUnread(conversation)) ||
@@ -206,23 +223,27 @@ export function ConversationList() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <header className="shrink-0 border-b border-border px-1 py-4">
-        <h1 className="text-base font-semibold text-foreground">
+        <h1 className="text-[20px] leading-7 font-semibold text-foreground">
           Conversations
         </h1>
+
         <label className="relative mt-4 block">
           <span className="sr-only">Search conversations</span>
+
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
+
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search conversations"
-            className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-info focus:ring-2 focus:ring-info/20"
+            className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-[15px] leading-5 outline-none transition-colors placeholder:text-muted-foreground focus:border-info focus:ring-2 focus:ring-info/20"
           />
         </label>
+
         <div
           className="mt-3 flex gap-1"
           role="group"
@@ -235,7 +256,7 @@ export function ConversationList() {
               onClick={() => setFilter(value)}
               aria-pressed={filter === value}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-info",
+                "rounded-md px-2.5 py-1 text-[14px] leading-5 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-info",
                 filter === value
                   ? "bg-brand-hr text-chat-filter-active-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -249,40 +270,53 @@ export function ConversationList() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3">
         {conversations === null && !error ? <ConversationListSkeleton /> : null}
+
         {error ? (
           <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-            <p className="text-sm font-semibold">Couldn’t load conversations</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            <p className="text-[15px] leading-5 font-semibold">
+              Couldn’t load conversations
+            </p>
+
+            <p className="mt-1 text-[14px] leading-5 text-muted-foreground">
               Please try again in a moment.
             </p>
+
             <button
               type="button"
               onClick={() => setRetryCount((count) => count + 1)}
-              className="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-info"
+              className="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-[14px] leading-5 font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-info"
             >
-              <RefreshCw className="size-3.5" aria-hidden="true" /> Retry
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+              Retry
             </button>
           </div>
         ) : null}
+
         {conversations?.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-4 text-center">
             <MessageSquare
               className="size-7 text-muted-foreground"
               aria-hidden="true"
             />
-            <p className="mt-3 text-sm font-semibold">No conversations yet</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+
+            <p className="mt-3 text-[15px] leading-5 font-semibold">
+              No conversations yet
+            </p>
+
+            <p className="mt-1 text-[14px] leading-5 text-muted-foreground">
               Employee conversations will appear here when they start.
             </p>
           </div>
         ) : null}
+
         {conversations &&
         conversations.length > 0 &&
         visibleConversations.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-xs leading-5 text-muted-foreground">
+          <div className="flex h-full items-center justify-center px-4 text-center text-[14px] leading-5 text-muted-foreground">
             No conversations match your search or filter.
           </div>
         ) : null}
+
         {visibleConversations.map((conversation) => (
           <ConversationListItem
             key={conversation.id}
