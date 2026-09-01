@@ -20,8 +20,8 @@ function isUnread(conversation: Conversation) {
   const { latestMessage, lastReadByHrAt } = conversation;
   return Boolean(
     latestMessage?.direction === "INBOUND" &&
-      (!lastReadByHrAt ||
-        new Date(latestMessage.createdAt) > new Date(lastReadByHrAt)),
+    (!lastReadByHrAt ||
+      new Date(latestMessage.createdAt) > new Date(lastReadByHrAt)),
   );
 }
 
@@ -30,9 +30,12 @@ function formatTimestamp(timestamp: string) {
   const now = new Date();
   const sameDay = date.toDateString() === now.toDateString();
 
-  return new Intl.DateTimeFormat(undefined, sameDay
-    ? { hour: "numeric", minute: "2-digit" }
-    : { month: "short", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(
+    undefined,
+    sameDay
+      ? { hour: "numeric", minute: "2-digit" }
+      : { month: "short", day: "numeric" },
+  ).format(date);
 }
 
 function initials(fullName: string) {
@@ -62,8 +65,13 @@ function ConversationListSkeleton() {
   );
 }
 
-function ConversationListItem({ conversation }: { conversation: Conversation }) {
-  const { selectedConversationId, selectConversation } = useConversationSelection();
+function ConversationListItem({
+  conversation,
+}: {
+  conversation: Conversation;
+}) {
+  const { selectedConversationId, selectConversation } =
+    useConversationSelection();
   const unread = isUnread(conversation);
   const isSelected = selectedConversationId === conversation.id;
   const preview = conversation.latestMessage?.content || "No messages yet";
@@ -84,7 +92,12 @@ function ConversationListItem({ conversation }: { conversation: Conversation }) 
 
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className={cn("min-w-0 flex-1 truncate text-sm", unread ? "font-semibold" : "font-medium")}>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-sm",
+              unread ? "font-semibold" : "font-medium",
+            )}
+          >
             {conversation.employee.fullName}
           </span>
           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
@@ -96,9 +109,17 @@ function ConversationListItem({ conversation }: { conversation: Conversation }) 
             {preview}
           </span>
           {conversation.activeEscalation ? (
-            <AlertTriangle className="size-3.5 shrink-0 text-warning" aria-label="Escalated conversation" />
+            <AlertTriangle
+              className="size-3.5 shrink-0 text-warning"
+              aria-label="Escalated conversation"
+            />
           ) : null}
-          {unread ? <span className="size-2 shrink-0 rounded-full bg-info" aria-label="Unread" /> : null}
+          {unread ? (
+            <span
+              className="size-2 shrink-0 rounded-full bg-info"
+              aria-label="Unread"
+            />
+          ) : null}
         </span>
       </span>
     </button>
@@ -106,7 +127,9 @@ function ConversationListItem({ conversation }: { conversation: Conversation }) 
 }
 
 export function ConversationList() {
-  const [conversations, setConversations] = useState<Conversation[] | null>(null);
+  const [conversations, setConversations] = useState<Conversation[] | null>(
+    null,
+  );
   const [error, setError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [query, setQuery] = useState("");
@@ -164,12 +187,15 @@ export function ConversationList() {
     const normalizedQuery = query.trim().toLocaleLowerCase();
 
     return conversations.filter((conversation) => {
-      const matchesQuery = !normalizedQuery || [
-        conversation.employee.fullName,
-        conversation.employee.employeeNumber,
-        conversation.employee.phoneNumber,
-      ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
-      const matchesFilter = filter === "all" ||
+      const matchesQuery =
+        !normalizedQuery ||
+        [
+          conversation.employee.fullName,
+          conversation.employee.employeeNumber,
+          conversation.employee.phoneNumber,
+        ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+      const matchesFilter =
+        filter === "all" ||
         (filter === "unread" && isUnread(conversation)) ||
         (filter === "escalated" && Boolean(conversation.activeEscalation));
 
@@ -180,10 +206,15 @@ export function ConversationList() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <header className="shrink-0 border-b border-border px-1 py-4">
-        <h1 className="text-base font-semibold text-foreground">Conversations</h1>
+        <h1 className="text-base font-semibold text-foreground">
+          Conversations
+        </h1>
         <label className="relative mt-4 block">
           <span className="sr-only">Search conversations</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
           <input
             type="search"
             value={query}
@@ -192,7 +223,11 @@ export function ConversationList() {
             className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-info focus:ring-2 focus:ring-info/20"
           />
         </label>
-        <div className="mt-3 flex gap-1" role="group" aria-label="Conversation filters">
+        <div
+          className="mt-3 flex gap-1"
+          role="group"
+          aria-label="Conversation filters"
+        >
           {filters.map(({ label, value }) => (
             <button
               key={value}
@@ -217,23 +252,43 @@ export function ConversationList() {
         {error ? (
           <div className="flex h-full flex-col items-center justify-center px-4 text-center">
             <p className="text-sm font-semibold">Couldn’t load conversations</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">Please try again in a moment.</p>
-            <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-info">
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Please try again in a moment.
+            </p>
+            <button
+              type="button"
+              onClick={() => setRetryCount((count) => count + 1)}
+              className="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-info"
+            >
               <RefreshCw className="size-3.5" aria-hidden="true" /> Retry
             </button>
           </div>
         ) : null}
         {conversations?.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-            <MessageSquare className="size-7 text-muted-foreground" aria-hidden="true" />
+            <MessageSquare
+              className="size-7 text-muted-foreground"
+              aria-hidden="true"
+            />
             <p className="mt-3 text-sm font-semibold">No conversations yet</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">Employee conversations will appear here when they start.</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Employee conversations will appear here when they start.
+            </p>
           </div>
         ) : null}
-        {conversations && conversations.length > 0 && visibleConversations.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-xs leading-5 text-muted-foreground">No conversations match your search or filter.</div>
+        {conversations &&
+        conversations.length > 0 &&
+        visibleConversations.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-4 text-center text-xs leading-5 text-muted-foreground">
+            No conversations match your search or filter.
+          </div>
         ) : null}
-        {visibleConversations.map((conversation) => <ConversationListItem key={conversation.id} conversation={conversation} />)}
+        {visibleConversations.map((conversation) => (
+          <ConversationListItem
+            key={conversation.id}
+            conversation={conversation}
+          />
+        ))}
       </div>
     </div>
   );
