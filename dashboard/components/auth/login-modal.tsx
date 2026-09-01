@@ -44,12 +44,12 @@ export function LoginModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-[2px]"
+      className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="login-title"
     >
-      <div className="w-full max-w-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="w-full max-w-105 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="px-7 pb-8 pt-8 sm:px-9">
           {/* Logo */}
           <div className="mb-7 flex justify-center">
@@ -91,7 +91,7 @@ export function LoginModal() {
               <div className="relative">
                 <Mail
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400"
                 />
 
                 <input
@@ -120,7 +120,7 @@ export function LoginModal() {
               <div className="relative">
                 <LockKeyhole
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400"
                 />
 
                 <input
@@ -143,9 +143,9 @@ export function LoginModal() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:pointer-events-none"
                 >
                   {showPassword ? (
-                    <EyeOff className="h-[18px] w-[18px]" />
+                    <EyeOff className="h-4.5 w-4.5" />
                   ) : (
-                    <Eye className="h-[18px] w-[18px]" />
+                    <Eye className="h-4.5 w-4.5" />
                   )}
                 </button>
               </div>
@@ -169,7 +169,7 @@ export function LoginModal() {
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-[18px] w-[18px] animate-spin" />
+                  <Loader2 className="h-4.5 w-4.5 animate-spin" />
                   Signing in...
                 </>
               ) : (

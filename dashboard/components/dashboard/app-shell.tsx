@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { AccountMenu } from "./account-menu";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { NavigationRail } from "./navigation-rail";
@@ -13,16 +15,29 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsAccountMenuOpen(false);
+  }, [pathname]);
+
   const isAnalytics = pathname === "/dashboard/analytics";
   const isConversations = pathname === "/dashboard/conversations";
 
   const content = (
     <>
-      <NavigationRail />
+      <NavigationRail
+        isAccountMenuOpen={isAccountMenuOpen}
+        onAccountMenuToggle={() => setIsAccountMenuOpen((current) => !current)}
+      />
 
       {!isAnalytics && (
-        <aside className="min-h-0 overflow-hidden border border-dashed bg-card p-4 max-[800px]:hidden">
-          {isConversations ? (
+        <aside className="min-h-0 overflow-hidden border border-dashed bg-card p-4 max-[760px]:hidden">
+          {isAccountMenuOpen ? (
+            <div id="account-menu" className="h-full">
+              <AccountMenu onClose={() => setIsAccountMenuOpen(false)} />
+            </div>
+          ) : isConversations ? (
             <ConversationList />
           ) : (
             <SecondaryWorkspace

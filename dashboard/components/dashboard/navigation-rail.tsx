@@ -6,6 +6,7 @@ import {
   MessageSquareText,
   TriangleAlert,
   ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -30,7 +31,15 @@ const navigationItems: NavigationItem[] = [
   { label: "HR Requests", href: "/dashboard/hr-requests", icon: ClipboardList },
 ];
 
-export function NavigationRail() {
+interface NavigationRailProps {
+  isAccountMenuOpen: boolean;
+  onAccountMenuToggle: () => void;
+}
+
+export function NavigationRail({
+  isAccountMenuOpen,
+  onAccountMenuToggle,
+}: NavigationRailProps) {
   const pathname = usePathname();
 
   return (
@@ -72,6 +81,9 @@ export function NavigationRail() {
       <div className="mt-auto border-t border-white/15 pt-4">
         <button
           type="button"
+          onClick={onAccountMenuToggle}
+          aria-expanded={isAccountMenuOpen}
+          aria-controls="account-menu"
           className="flex w-full items-center gap-2 rounded-xl py-2 text-left text-white transition-colors hover:bg-white/10"
         >
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-base font-semibold text-brand-blue">
@@ -93,7 +105,11 @@ export function NavigationRail() {
             </span>
           </span>
 
-          <ChevronDown className="size-3.5 shrink-0 text-white/80" />
+          {isAccountMenuOpen ? (
+            <ChevronUp className="size-3.5 shrink-0 text-white/80" />
+          ) : (
+            <ChevronDown className="size-3.5 shrink-0 text-white/80" />
+          )}
         </button>
       </div>
     </nav>
