@@ -475,7 +475,7 @@ export function AnalyticsWorkspace() {
               </div>
             </div>
 
-            <div className="mt-5 h-64 w-full">
+            <div className="mt-4 h-52  w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={activeActivity.data}
@@ -593,7 +593,7 @@ export function AnalyticsWorkspace() {
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h3 className="text-sm font-semibold">Conversation Journey</h3>
 
-            <div className="mt-5 grid grid-cols-6 gap-1">
+            <div className="mt-4 grid grid-cols-6 gap-2">
               {journey.map(([label, value, percentage], index) => (
                 <div key={label} className="text-center">
                   <div className="mx-auto flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -614,7 +614,7 @@ export function AnalyticsWorkspace() {
               ))}
             </div>
 
-            <div className="mt-6 grid grid-cols-2 border-t pt-4">
+            <div className="mt-4 grid grid-cols-2 border-t pt-3">
               <div>
                 <p className="text-xs text-muted-foreground">
                   Conversion to Bot Completion
@@ -638,7 +638,7 @@ export function AnalyticsWorkspace() {
               <button className="text-lg text-muted-foreground">⋮</button>
             </div>
 
-            <div className="relative mt-4 h-40 w-full">
+            <div className="relative mt-3 h-40 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip
@@ -669,7 +669,7 @@ export function AnalyticsWorkspace() {
               </div>
             </div>
 
-            <div className="mt-5 space-y-2 text-sm">
+            <div className="mt-3 space-y-2 text-sm">
               {escalationBreakdown.map((entry) => (
                 <div
                   key={entry.name}
@@ -689,7 +689,7 @@ export function AnalyticsWorkspace() {
               ))}
             </div>
 
-            <div className="mt-5 border-t pt-4">
+            <div className="mt-3 border-t pt-3">
               <p className="text-xs text-muted-foreground">
                 Avg. Escalations / Day
               </p>
