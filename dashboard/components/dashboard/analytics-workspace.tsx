@@ -2,25 +2,31 @@
 
 import { useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  Bot,
-  CalendarDays,
-  ChevronDown,
-  Download,
-  Grid2X2,
-  MessageSquare,
-  RefreshCw,
-  Timer,
-  Users,
-} from "lucide-react";
+  IconAlertTriangle,
+  IconArrowRight,
+  IconBot,
+  IconCalendar,
+  IconCheck,
+  IconChevronDown,
+  IconChevronLeft,
+  IconChevronRight,
+  IconDocument,
+  IconDownload,
+  IconGrid,
+  IconMessage,
+  IconMoreVertical,
+  IconRefresh,
+  IconTimer,
+  IconTrendUp,
+  IconUsers,
+  IconWorkflow,
+  type IconProps,
+} from "./icons";
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
-  LabelList,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -49,7 +55,7 @@ const kpis = [
     value: "1,248",
     change: "14.8%",
     comparison: "vs May 21 – Jun 19",
-    icon: MessageSquare,
+    icon: IconMessage,
     tone: "blue",
     trend: [72, 78, 74, 82, 88, 84, 92, 96, 90, 100, 104, 110],
   },
@@ -58,7 +64,7 @@ const kpis = [
     value: "600",
     change: "8.2%",
     comparison: "vs May 21 – Jun 19",
-    icon: Users,
+    icon: IconUsers,
     tone: "teal",
     trend: [58, 60, 59, 63, 66, 64, 70, 74, 72, 78, 82, 86],
   },
@@ -67,7 +73,7 @@ const kpis = [
     value: "76.4%",
     change: "5.7%",
     comparison: "vs May 21 – Jun 19",
-    icon: Bot,
+    icon: IconBot,
     tone: "green",
     trend: [60, 62, 64, 63, 66, 68, 70, 69, 72, 74, 73, 76],
   },
@@ -76,7 +82,7 @@ const kpis = [
     value: "18.6%",
     change: "3.4%",
     comparison: "vs May 21 – Jun 19",
-    icon: AlertTriangle,
+    icon: IconAlertTriangle,
     tone: "red",
     trend: [15, 14, 16, 15, 17, 16, 18, 17, 19, 18, 20, 19],
   },
@@ -85,7 +91,7 @@ const kpis = [
     value: "1m 42s",
     change: "18.3%",
     comparison: "vs May 21 – Jun 19",
-    icon: Timer,
+    icon: IconTimer,
     tone: "purple",
     trend: [50, 55, 52, 58, 60, 57, 63, 65, 62, 68, 70, 74],
   },
@@ -94,7 +100,7 @@ const kpis = [
     value: "114",
     change: "7.6%",
     comparison: "vs May 21 – Jun 19",
-    icon: Users,
+    icon: IconUsers,
     tone: "coral",
     trend: [70, 74, 72, 78, 80, 77, 83, 85, 82, 88, 90, 94],
   },
@@ -108,14 +114,61 @@ const services = [
   ["Talk to HR", "114", "9.2%"],
 ];
 
-const journey = [
-  ["Started Conversation", "1,248", "100%"],
-  ["Main Menu Viewed", "1,210", "96.9%"],
-  ["HR Service Selected", "1,124", "90.1%"],
-  ["Information Provided", "984", "78.8%"],
-  ["Completed (Bot)", "953", "76.4%"],
-  ["Escalated to HR", "295", "18.6%"],
-];
+const journeySteps = [
+  {
+    label: "Started Conversation",
+    value: "1,248",
+    percentage: "100%",
+    icon: IconMessage,
+    tone: "blue",
+  },
+  {
+    label: "Main Menu Viewed",
+    value: "1,210",
+    percentage: "96.9%",
+    icon: IconGrid,
+    tone: "teal",
+  },
+  {
+    label: "HR Service Selected",
+    value: "1,124",
+    percentage: "90.1%",
+    icon: IconWorkflow,
+    tone: "purple",
+  },
+  {
+    label: "Information Provided",
+    value: "984",
+    percentage: "78.8%",
+    icon: IconDocument,
+    tone: "amber",
+  },
+  {
+    label: "Completed (Bot)",
+    value: "953",
+    percentage: "76.4%",
+    icon: IconCheck,
+    tone: "green",
+  },
+  {
+    label: "Escalated to HR",
+    value: "295",
+    percentage: "18.6%",
+    icon: IconUsers,
+    tone: "red",
+  },
+] as const;
+
+const journeyValues = journeySteps.map((step) =>
+  Number(step.value.replace(/,/g, "")),
+);
+
+const journeyDropOffs = journeySteps.map((_, index) => {
+  if (index === 0 || index === journeySteps.length - 1) return null;
+  const prev = journeyValues[index - 1];
+  const curr = journeyValues[index];
+  return (((prev - curr) / prev) * 100).toFixed(1);
+});
 
 const escalationBreakdown = [
   { name: "Talk to HR", value: 752, percentage: "32.3%", color: "#0057b8" },
@@ -163,19 +216,47 @@ function EscalationTooltip({
   );
 }
 
-const funnelData = journey.map(([label, value, percentage], index) => ({
-  label,
-  value: Number(value.replace(/,/g, "")),
-  percentage,
-  isEscalation: index === journey.length - 1,
-}));
-
 const paths = [
-  ["Main Menu → Leave Balance", "396", "94.2%", "5.8%", "1m 38s"],
-  ["Main Menu → Policy FAQ", "336", "91.6%", "8.4%", "1m 22s"],
-  ["Main Menu → Benefits", "234", "88.3%", "11.7%", "1m 45s"],
-  ["Main Menu → HR Document Requests", "168", "78.1%", "21.9%", "2m 12s"],
-  ["Main Menu → Talk to HR", "114", "22.7%", "77.3%", "3m 05s"],
+  {
+    from: "Main Menu",
+    to: "Leave Balance",
+    conversations: "3,965",
+    completion: 94.2,
+    escalation: "5.8%",
+    duration: "1m 38s",
+  },
+  {
+    from: "Main Menu",
+    to: "Policy FAQ",
+    conversations: "3,215",
+    completion: 91.6,
+    escalation: "8.4%",
+    duration: "1m 22s",
+  },
+  {
+    from: "Main Menu",
+    to: "Benefits",
+    conversations: "2,184",
+    completion: 88.3,
+    escalation: "11.7%",
+    duration: "1m 45s",
+  },
+  {
+    from: "Main Menu",
+    to: "HR Document Requests",
+    conversations: "1,682",
+    completion: 78.1,
+    escalation: "21.9%",
+    duration: "2m 12s",
+  },
+  {
+    from: "Main Menu",
+    to: "Talk to HR",
+    conversations: "1,142",
+    completion: 22.7,
+    escalation: "77.3%",
+    duration: "3m 05s",
+  },
 ];
 
 type ActivityPoint = {
@@ -297,20 +378,21 @@ const toneClasses = {
   red: "bg-red-50 text-red-500",
   purple: "bg-violet-50 text-violet-600",
   coral: "bg-orange-50 text-orange-500",
+  amber: "bg-amber-50 text-amber-600",
 };
 
 function FilterButton({
   icon: Icon,
   children,
 }: {
-  icon: typeof CalendarDays;
+  icon: (props: IconProps) => React.JSX.Element;
   children: React.ReactNode;
 }) {
   return (
     <button className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm">
       <Icon className="size-4 text-muted-foreground" />
       <span>{children}</span>
-      <ChevronDown className="ml-1 size-3.5 text-muted-foreground" />
+      <IconChevronDown className="ml-1 size-3.5 text-muted-foreground" />
     </button>
   );
 }
@@ -340,11 +422,14 @@ function KpiCard({
         </div>
       </div>
       <p className="mt-4 text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+      <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
         {value}
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-emerald-600">↑ {change}</span>{" "}
+        <span className="inline-flex items-center gap-0.5 font-semibold text-emerald-600">
+          <IconTrendUp className="size-3" />
+          {change}
+        </span>{" "}
         {comparison}
       </p>
       <div className="mt-3 h-8 w-full">
@@ -390,35 +475,35 @@ export function AnalyticsWorkspace() {
     <div className="flex h-full min-h-dvh flex-col overflow-y-auto bg-[#f7f9fc]">
       <div className="space-y-4 p-5">
         {/* Header */}
-        <header className="flex items-start justify-between gap-6">
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-foreground">
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">
                 HR Operations
               </h1>
               <span className="text-muted-foreground">›</span>
-              <h2 className="text-lg font-semibold text-foreground">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">
                 Analytics
               </h2>
             </div>
 
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-muted-foreground">
               Monitor employee conversations, HR usage, escalations, and chatbot
               performance.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <FilterButton icon={CalendarDays}>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <FilterButton icon={IconCalendar}>
               May 22 – Jun 20, 2025
             </FilterButton>
-            <FilterButton icon={Users}>All Departments</FilterButton>
-            <FilterButton icon={Grid2X2}>All Services</FilterButton>
+            <FilterButton icon={IconUsers}>All Departments</FilterButton>
+            <FilterButton icon={IconGrid}>All Services</FilterButton>
             <button className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-xs font-medium shadow-sm">
-              <RefreshCw className="size-4" />
+              <IconRefresh className="size-4" />
               Refresh
             </button>
             <button className="flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground shadow-sm">
-              <Download className="size-4" />
+              <IconDownload className="size-4" />
               Export
             </button>
           </div>
@@ -430,7 +515,7 @@ export function AnalyticsWorkspace() {
         </div>
 
         {/* KPI cards */}
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {kpis.map((kpi) => (
             <KpiCard key={kpi.label} {...kpi} />
           ))}
@@ -441,7 +526,9 @@ export function AnalyticsWorkspace() {
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Conversation Activity</h3>
+                <h3 className="text-sm font-semibold tracking-tight">
+                  Conversation Activity
+                </h3>
                 <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
                   {activitySeries.map((series) => (
                     <span
@@ -560,8 +647,12 @@ export function AnalyticsWorkspace() {
           </div>
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Most Used HR Services</h3>
-              <button className="text-lg text-muted-foreground">⋮</button>
+              <h3 className="text-sm font-semibold tracking-tight">
+                Most Used HR Services
+              </h3>
+              <button className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <IconMoreVertical className="size-4" />
+              </button>
             </div>
 
             <div className="mt-5 space-y-5">
@@ -569,7 +660,7 @@ export function AnalyticsWorkspace() {
                 <div key={service}>
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium">{service}</span>
-                    <span className="text-muted-foreground">
+                    <span className="tabular-nums text-muted-foreground">
                       {value} ({percentage})
                     </span>
                   </div>
@@ -589,164 +680,239 @@ export function AnalyticsWorkspace() {
         </section>
 
         {/* Lower analytics */}
-        <section className="grid gap-3 lg:grid-cols-[1.35fr_0.85fr] xl:grid-cols-[1.35fr_0.85fr_1.3fr]">
-          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <h3 className="text-sm font-semibold">Conversation Journey</h3>
+        <div className="space-y-3">
+          <section className="grid gap-3 lg:grid-cols-[1.65fr_1fr]">
+            <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+              <h3 className="text-sm font-semibold tracking-tight">
+                Conversation Journey
+              </h3>
 
-            <div className="mt-4 grid grid-cols-6 gap-2">
-              {journey.map(([label, value, percentage], index) => (
-                <div key={label} className="text-center">
-                  <div className="mx-auto flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    {index + 1}
-                  </div>
+              <div className="mt-3 overflow-x-auto">
+                <div className="flex min-w-140 items-start justify-between gap-1 px-1">
+                  {journeySteps.map((step, index) => {
+                    const Icon = step.icon;
+                    const dropOff = journeyDropOffs[index];
 
-                  <p className="mt-2 text-xs font-medium leading-snug">
-                    {label}
+                    return (
+                      <div key={step.label} className="flex items-start">
+                        <div className="w-21 text-center">
+                          <div
+                            className={`mx-auto flex size-8 items-center justify-center rounded-full ${
+                              toneClasses[step.tone as keyof typeof toneClasses]
+                            }`}
+                          >
+                            <Icon className="size-4" />
+                          </div>
+
+                          <p className="mt-1.5 text-[11px] font-medium leading-tight text-foreground">
+                            {step.label}
+                          </p>
+
+                          <p className="mt-1.5 text-sm font-semibold tabular-nums">
+                            {step.value}
+                          </p>
+                          <p className="text-[11px] tabular-nums text-muted-foreground">
+                            {step.percentage}
+                          </p>
+
+                          <div className="mt-1.5 h-3.25">
+                            {dropOff ? (
+                              <p className="text-[10px] font-medium leading-tight text-red-500">
+                                Drop-off {dropOff}%
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {index < journeySteps.length - 1 ? (
+                          <IconArrowRight className="mt-2.5 size-3.5 shrink-0 text-muted-foreground/50" />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 border-t border-border pt-2.5">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Conversion to Bot Completion
                   </p>
-
-                  <p className="mt-2 text-sm font-semibold">{value}</p>
-                  <p className="text-xs text-muted-foreground">{percentage}</p>
-
-                  {index < journey.length - 1 ? (
-                    <p className="mt-2 text-xs text-red-500">Drop-off</p>
-                  ) : null}
+                  <p className="mt-0.5 text-lg font-semibold tracking-tight tabular-nums text-emerald-600">
+                    76.4%
+                  </p>
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-4 grid grid-cols-2 border-t pt-3">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Conversion to Bot Completion
-                </p>
-                <p className="mt-1 text-xl font-semibold text-emerald-600">
-                  76.4%
-                </p>
-              </div>
-
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">
-                  Conversion to Escalation
-                </p>
-                <p className="mt-1 text-xl font-semibold text-red-500">18.6%</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Escalation Analytics</h3>
-              <button className="text-lg text-muted-foreground">⋮</button>
-            </div>
-
-            <div className="relative mt-3 h-40 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Tooltip
-                    content={(props) => <EscalationTooltip {...props} />}
-                  />
-                  <Pie
-                    data={escalationBreakdown}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={52}
-                    outerRadius={72}
-                    paddingAngle={2}
-                    cornerRadius={4}
-                    stroke="none"
-                  >
-                    {escalationBreakdown.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <p className="text-lg font-semibold">2,328</p>
-                  <p className="text-xs text-muted-foreground">Total</p>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">
+                    Conversion to Escalation
+                  </p>
+                  <p className="mt-0.5 text-lg font-semibold tracking-tight tabular-nums text-red-500">
+                    18.6%
+                  </p>
                 </div>
               </div>
             </div>
-
-            <div className="mt-3 space-y-2 text-sm">
-              {escalationBreakdown.map((entry) => (
-                <div
-                  key={entry.name}
-                  className="flex items-center justify-between"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className="size-1.5 rounded-full"
-                      style={{ background: entry.color }}
-                    />
-                    {entry.name}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {entry.value} ({entry.percentage})
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-3 border-t pt-3">
-              <p className="text-xs text-muted-foreground">
-                Avg. Escalations / Day
-              </p>
-              <p className="mt-1 text-xl font-semibold">77</p>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <h3 className="text-sm font-semibold">Top Conversation Paths</h3>
-
-            <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-120 text-left text-sm">
-                <thead className="border-b text-muted-foreground">
-                  <tr>
-                    <th className="pb-2 font-medium">Conversation Path</th>
-                    <th className="pb-2 text-right font-medium">
-                      Conversations
-                    </th>
-                    <th className="pb-2 text-right font-medium">Completion</th>
-                    <th className="pb-2 text-right font-medium">Escalation</th>
-                    <th className="pb-2 text-right font-medium">
-                      Avg. Duration
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {paths.map((path) => (
-                    <tr key={path[0]} className="border-b last:border-0">
-                      <td className="py-3 pr-2 font-medium">{path[0]}</td>
-                      <td className="py-3 text-right">{path[1]}</td>
-                      <td className="py-3 text-right text-emerald-600">
-                        {path[2]}
-                      </td>
-                      <td className="py-3 text-right text-red-500">
-                        {path[3]}
-                      </td>
-                      <td className="py-3 text-right text-muted-foreground">
-                        {path[4]}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Showing 1 to 5 of 5 entries</span>
-              <div className="flex gap-1">
-                <button className="rounded border px-2 py-1">‹</button>
-                <button className="rounded border border-primary px-2 py-1 text-primary">
-                  1
+            <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold tracking-tight">
+                  Escalation Analytics
+                </h3>
+                <button className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  <IconMoreVertical className="size-4" />
                 </button>
-                <button className="rounded border px-2 py-1">›</button>
+              </div>
+
+              <div className="relative mt-2 h-30 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Tooltip
+                      content={(props) => <EscalationTooltip {...props} />}
+                    />
+                    <Pie
+                      data={escalationBreakdown}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={40}
+                      outerRadius={56}
+                      paddingAngle={2}
+                      cornerRadius={4}
+                      stroke="none"
+                    >
+                      {escalationBreakdown.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-base font-semibold tracking-tight tabular-nums">
+                      2,328
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Total</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 space-y-1.5 text-sm">
+                {escalationBreakdown.map((entry) => (
+                  <div
+                    key={entry.name}
+                    className="flex items-center justify-between"
+                  >
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <span
+                        className="size-1.5 rounded-full"
+                        style={{ background: entry.color }}
+                      />
+                      {entry.name}
+                    </span>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {entry.value} ({entry.percentage})
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-2 border-t border-border pt-2">
+                <p className="text-xs text-muted-foreground">
+                  Avg. Escalations / Day
+                </p>
+                <p className="mt-0.5 text-lg font-semibold tracking-tight tabular-nums">
+                  77
+                </p>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+
+          <section>
+            <div className="mx-auto w-full max-w-8xl rounded-xl border border-border bg-card p-4 shadow-sm">
+              <h3 className="text-sm font-semibold tracking-tight">
+                Top Conversation Paths
+              </h3>
+
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-160 text-left text-sm">
+                  <thead className="border-b border-border">
+                    <tr>
+                      <th className="pb-2 text-xs font-medium text-muted-foreground">
+                        Conversation Path
+                      </th>
+                      <th className="pb-2 text-right text-xs font-medium text-muted-foreground">
+                        Conversations
+                      </th>
+                      <th className="pb-2 text-right text-xs font-medium text-muted-foreground">
+                        Completion
+                      </th>
+                      <th className="pb-2 text-right text-xs font-medium text-muted-foreground">
+                        Escalation
+                      </th>
+                      <th className="pb-2 text-right text-xs font-medium text-muted-foreground">
+                        Avg. Duration
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {paths.map((path) => (
+                      <tr
+                        key={path.to}
+                        className="border-b border-border last:border-0"
+                      >
+                        <td className="py-3 pr-2 font-medium text-foreground">
+                          <span className="inline-flex items-center gap-1.5">
+                            {path.from}
+                            <IconArrowRight className="size-3.5 text-muted-foreground" />
+                            {path.to}
+                          </span>
+                        </td>
+                        <td className="py-3 text-right tabular-nums">
+                          {path.conversations}
+                        </td>
+                        <td className="py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full bg-emerald-500"
+                                style={{ width: `${path.completion}%` }}
+                              />
+                            </div>
+                            <span className="tabular-nums font-medium text-emerald-600">
+                              {path.completion}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 text-right tabular-nums font-medium text-red-500">
+                          {path.escalation}
+                        </td>
+                        <td className="py-3 text-right tabular-nums text-muted-foreground">
+                          {path.duration}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Showing 1 to 5 of 5 entries</span>
+                <div className="flex items-center gap-1">
+                  <button className="flex size-7 items-center justify-center rounded-md border border-border transition-colors hover:bg-muted">
+                    <IconChevronLeft className="size-3.5" />
+                  </button>
+                  <button className="flex size-7 items-center justify-center rounded-md border border-primary text-primary">
+                    1
+                  </button>
+                  <button className="flex size-7 items-center justify-center rounded-md border border-border transition-colors hover:bg-muted">
+                    <IconChevronRight className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

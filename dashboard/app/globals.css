@@ -19,6 +19,10 @@
   --font-heading: var(--font-intertech-sans);
   --font-mono: var(--font-intertech-mono);
 
+  /* ---------- Layout ---------- */
+
+  --container-8xl: 90rem;
+
   /* ---------- Core surfaces ---------- */
 
   --color-background: var(--background);
