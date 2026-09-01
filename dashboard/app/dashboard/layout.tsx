@@ -1,4 +1,5 @@
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { DashboardAuthGate } from "@/components/auth/dashboard-auth-gate";
 import { AppShell } from "@/components/dashboard/app-shell";
 
 export default function DashboardLayout({
@@ -6,7 +7,9 @@ export default function DashboardLayout({
 }: LayoutProps<"/dashboard">) {
   return (
     <AuthProvider>
-      <AppShell>{children}</AppShell>
+      <DashboardAuthGate>
+        <AppShell>{children}</AppShell>
+      </DashboardAuthGate>
     </AuthProvider>
   );
 }

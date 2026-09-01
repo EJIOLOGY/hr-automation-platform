@@ -21,7 +21,7 @@ export function AppShell({ children }: AppShellProps) {
       <NavigationRail />
 
       {!isAnalytics && (
-        <aside className="min-h-0 overflow-hidden border border-dashed bg-card p-4 max-[760px]:hidden">
+        <aside className="min-h-0 overflow-hidden border border-dashed bg-card p-4 max-[800px]:hidden">
           {isConversations ? (
             <ConversationList />
           ) : (
@@ -50,7 +50,11 @@ export function AppShell({ children }: AppShellProps) {
           : "grid h-dvh grid-cols-[8.7rem_minmax(17rem,22rem)_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
       }
     >
-      {isConversations ? <ConversationProvider>{content}</ConversationProvider> : content}
+      {isConversations ? (
+        <ConversationProvider>{content}</ConversationProvider>
+      ) : (
+        content
+      )}
     </main>
   );
 }
