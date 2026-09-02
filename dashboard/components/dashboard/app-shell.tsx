@@ -33,7 +33,7 @@ export function AppShell({ children }: AppShellProps) {
       />
 
       {!isAnalytics && (
-        <aside className="min-h-0 overflow-hidden border border-dashed bg-card p-4 max-[760px]:hidden">
+        <aside className="min-h-0 overflow-hidden border border-dashed bg-card py-4 px-1.5 max-[760px]:hidden">
           {showAccountMenu ? (
             <div id="account-menu" className="h-full">
               <AccountMenu onClose={() => setAccountMenuPath(null)} />
