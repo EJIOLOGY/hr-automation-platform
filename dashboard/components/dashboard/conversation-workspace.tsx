@@ -190,7 +190,8 @@ export function ConversationWorkspace() {
       {/* Message history */}
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto bg-[#F7F9FC] px-5 py-4",
+          "min-h-0 flex-1 overflow-y-auto px-5 py-4",
+          "bg-[url('/tertiary-telegram-wallpaper.png')] bg-cover bg-center bg-no-repeat",
           "scrollbar-thin",
           "[scrollbar-color:#C4C4C4_transparent]",
           "[&::-webkit-scrollbar]:w-1.5",
@@ -332,13 +333,13 @@ function MessageHistory({ messages }: { messages: ConversationMessage[] }) {
           >
             <article
               className={cn(
-                "min-w-0 max-w-[75%] rounded-xl border px-3.5 py-2.5 shadow-sm",
+                "min-w-0 max-w-[75%] rounded-[14px] border px-3.5 py-2.5 shadow-sm",
                 isOutbound
                   ? "border-[#D6E7EA] bg-[linear-gradient(135deg,#EAF5FF_0%,#E2F7F4_100%)] text-[#172033]"
                   : "border-[#E3E8EE] bg-white text-[#172033]",
               )}
             >
-              <p className="whitespace-pre-wrap break-words text-[14px] leading-5">
+              <p className="whitespace-pre-wrap wrap-break-word text-[14px] leading-5">
                 {message.content}
               </p>
 
