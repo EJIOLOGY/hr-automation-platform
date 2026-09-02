@@ -188,60 +188,71 @@ export function ConversationWorkspace() {
       </header>
 
       {/* Message history */}
-      <div
-        className={cn(
-          "min-h-0 flex-1 overflow-y-auto px-5 py-4",
-          "bg-[url('/tertiary-telegram-wallpaper.png')] bg-cover bg-center bg-no-repeat",
-          "scrollbar-thin",
-          "[scrollbar-color:#C4C4C4_transparent]",
-          "[&::-webkit-scrollbar]:w-1.5",
-          "[&::-webkit-scrollbar-track]:bg-transparent",
-          "[&::-webkit-scrollbar-thumb]:rounded-full",
-          "[&::-webkit-scrollbar-thumb]:bg-[#C4C4C4]",
-          "[&::-webkit-scrollbar-thumb:hover]:bg-[#A8A8A8]",
-        )}
-      >
-        {isLoading ? <MessageHistorySkeleton /> : null}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* Blurred wallpaper layer */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 scale-[1.02] bg-[url('/tertiary-telegram-wallpaper.png')] bg-cover bg-center bg-no-repeat blur-[0.2px]"
+        />
 
-        {hasError ? (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <p className="text-[15px] font-semibold leading-5 text-[#172033]">
-              Couldn’t load messages
-            </p>
+        {/* Soft readability overlay */}
+        {/* <div aria-hidden="true" className="absolute inset-0 bg-white/10" /> */}
 
-            <p className="mt-1 text-[14px] leading-5 text-[#687586]">
-              Please try again in a moment.
-            </p>
+        {/* Message content */}
+        <div
+          className={cn(
+            "relative z-10 h-full overflow-y-auto px-5 py-4",
+            "scrollbar-thin",
+            "[scrollbar-color:#C4C4C4_transparent]",
+            "[&::-webkit-scrollbar]:w-1.5",
+            "[&::-webkit-scrollbar-track]:bg-transparent",
+            "[&::-webkit-scrollbar-thumb]:rounded-full",
+            "[&::-webkit-scrollbar-thumb]:bg-[#C4C4C4]",
+            "[&::-webkit-scrollbar-thumb:hover]:bg-[#A8A8A8]",
+          )}
+        >
+          {isLoading ? <MessageHistorySkeleton /> : null}
 
-            <button
-              type="button"
-              onClick={() => setRetryCount((count) => count + 1)}
-              className="mt-4 inline-flex items-center gap-2 rounded-md border border-[#D9E0E7] px-3 py-2 text-[14px] font-medium text-[#172033] transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-[#3F80E0]"
-            >
-              <RefreshCw className="size-3.5" aria-hidden="true" />
-              Retry
-            </button>
-          </div>
-        ) : null}
+          {hasError ? (
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <p className="text-[15px] font-semibold leading-5 text-[#172033]">
+                Couldn’t load messages
+              </p>
 
-        {messages?.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <MessageSquareText
-              className="size-7 text-[#687586]"
-              aria-hidden="true"
-            />
+              <p className="mt-1 text-[14px] leading-5 text-[#687586]">
+                Please try again in a moment.
+              </p>
 
-            <p className="mt-3 text-[15px] font-semibold leading-5 text-[#172033]">
-              No messages yet
-            </p>
+              <button
+                type="button"
+                onClick={() => setRetryCount((count) => count + 1)}
+                className="mt-4 inline-flex items-center gap-2 rounded-md border border-[#D9E0E7] px-3 py-2 text-[14px] font-medium text-[#172033] transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-[#3F80E0]"
+              >
+                <RefreshCw className="size-3.5" aria-hidden="true" />
+                Retry
+              </button>
+            </div>
+          ) : null}
 
-            <p className="mt-1 text-[14px] leading-5 text-[#687586]">
-              Messages in this conversation will appear here.
-            </p>
-          </div>
-        ) : null}
+          {messages?.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <MessageSquareText
+                className="size-7 text-[#687586]"
+                aria-hidden="true"
+              />
 
-        {messages ? <MessageHistory messages={messages} /> : null}
+              <p className="mt-3 text-[15px] font-semibold leading-5 text-[#172033]">
+                No messages yet
+              </p>
+
+              <p className="mt-1 text-[14px] leading-5 text-[#687586]">
+                Messages in this conversation will appear here.
+              </p>
+            </div>
+          ) : null}
+
+          {messages ? <MessageHistory messages={messages} /> : null}
+        </div>
       </div>
 
       {/* Reply composer */}
@@ -335,7 +346,7 @@ function MessageHistory({ messages }: { messages: ConversationMessage[] }) {
               className={cn(
                 "min-w-0 max-w-[75%] rounded-[14px] border px-3.5 py-2.5 shadow-sm",
                 isOutbound
-                  ? "border-[#D6E7EA] bg-[linear-gradient(135deg,#EAF5FF_0%,#E2F7F4_100%)] text-[#172033]"
+                  ? "border-[#CFE5E3] bg-[linear-gradient(135deg,#EAF5FF_0%,#D6F3EE_100%)] text-[#172033]"
                   : "border-[#E3E8EE] bg-white text-[#172033]",
               )}
             >
