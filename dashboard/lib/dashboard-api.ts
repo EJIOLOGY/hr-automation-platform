@@ -50,6 +50,48 @@ export interface ConversationMessagesResponse {
   pagination: ConversationListResponse["pagination"];
 }
 
+export type EscalationStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+
+interface QueueEmployee extends ConversationEmployee {}
+
+interface AssignedHrOfficer {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+}
+
+interface QueueSession {
+  id: string;
+  currentState: string;
+  isActive: boolean;
+  lastActivityAt: string;
+}
+
+export interface EscalationRecord {
+  id: string;
+  reason: string;
+  category: string | null;
+  documentType: string | null;
+  status: EscalationStatus;
+  resolutionNote: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  employee: QueueEmployee;
+  assignedHrOfficer: AssignedHrOfficer | null;
+  session: QueueSession;
+}
+
+export interface HrRequestRecord extends Omit<EscalationRecord, "documentType"> {
+  documentType: string | null;
+  documentLabel: string | null;
+}
+
+interface CursorListResponse<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
 const dashboardApiUrl =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api/v1";
 
@@ -94,6 +136,63 @@ export async function sendConversationMessage(
       body: JSON.stringify({ content }),
     },
   );
+}
+
+export async function getEscalations(
+  accessToken: string,
+  status?: EscalationStatus,
+): Promise<CursorListResponse<EscalationRecord>> {
+  const query = status ? `?status=${status}` : "";
+  return dashboardRequest(`/dashboard/escalations${query}`, accessToken);
+}
+
+export async function getEscalation(
+  id: string,
+  accessToken: string,
+): Promise<EscalationRecord> {
+  return dashboardRequest(`/dashboard/escalations/${id}`, accessToken);
+}
+
+export async function claimEscalation(
+  id: string,
+  accessToken: string,
+): Promise<EscalationRecord> {
+  return dashboardRequest(`/dashboard/escalations/${id}/claim`, accessToken, {
+    method: "POST",
+  });
+}
+
+export async function resolveEscalation(
+  id: string,
+  accessToken: string,
+): Promise<EscalationRecord> {
+  return dashboardRequest(`/dashboard/escalations/${id}/resolve`, accessToken, {
+    method: "POST",
+  });
+}
+
+export async function closeEscalation(
+  id: string,
+  accessToken: string,
+): Promise<EscalationRecord> {
+  return dashboardRequest(`/dashboard/escalations/${id}/close`, accessToken, {
+    method: "POST",
+  });
+}
+
+export async function getHrRequests(
+  accessToken: string,
+  status?: EscalationStatus,
+): Promise<CursorListResponse<HrRequestRecord>> {
+  const query = status ? `?status=${status}` : "";
+  return dashboardRequest(`/dashboard/hr-requests${query}`, accessToken);
+}
+
+export async function getHrRequest(
+  id: string,
+  accessToken: string,
+): Promise<HrRequestRecord> {
+  return dashboardRequest(`/dashboard/hr-requests/${id}`, accessToken);
 }
 
 async function dashboardRequest<T>(

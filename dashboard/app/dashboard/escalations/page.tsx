@@ -1,5 +1,5 @@
-import { DashboardPlaceholder } from "@/components/dashboard/dashboard-placeholder";
+import { EscalationsWorkspace } from "@/components/dashboard/escalations-workspace";
 
 export default function EscalationsPage() {
-  return <DashboardPlaceholder title="Escalations" />;
+  return <EscalationsWorkspace />;
 }

@@ -8,6 +8,9 @@ import { NavigationRail } from "./navigation-rail";
 import { SecondaryWorkspace } from "./secondary-workspace";
 import { ConversationList } from "./conversation-list";
 import { ConversationProvider } from "./conversation-context";
+import { OperationalQueueProvider } from "./operational-queue-context";
+import { EscalationQueue } from "./escalations-workspace";
+import { HrRequestsQueue } from "./hr-requests-workspace";
 
 interface AppShellProps {
   children: ReactNode;
@@ -19,6 +22,8 @@ export function AppShell({ children }: AppShellProps) {
 
   const isAnalytics = pathname === "/dashboard/analytics";
   const isConversations = pathname === "/dashboard/conversations";
+  const isEscalations = pathname === "/dashboard/escalations";
+  const isHrRequests = pathname === "/dashboard/hr-requests";
   const showAccountMenu = accountMenuPath === pathname && !isAnalytics;
 
   const content = (
@@ -40,6 +45,10 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           ) : isConversations ? (
             <ConversationList />
+          ) : isEscalations ? (
+            <EscalationQueue />
+          ) : isHrRequests ? (
+            <HrRequestsQueue />
           ) : (
             <SecondaryWorkspace
               title="Workspace"
@@ -68,6 +77,8 @@ export function AppShell({ children }: AppShellProps) {
     >
       {isConversations ? (
         <ConversationProvider>{content}</ConversationProvider>
+      ) : isEscalations || isHrRequests ? (
+        <OperationalQueueProvider>{content}</OperationalQueueProvider>
       ) : (
         content
       )}

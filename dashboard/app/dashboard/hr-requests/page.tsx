@@ -1,5 +1,5 @@
-import { DashboardPlaceholder } from "@/components/dashboard/dashboard-placeholder";
+import { HrRequestsWorkspace } from "@/components/dashboard/hr-requests-workspace";
 
 export default function HrRequestsPage() {
-  return <DashboardPlaceholder title="HR Requests" />;
+  return <HrRequestsWorkspace />;
 }
