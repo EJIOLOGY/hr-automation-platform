@@ -566,7 +566,7 @@ export function AnalyticsWorkspace() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={activeActivity.data}
-                  margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+                  margin={{ top: 8, right: 8, left: -10, bottom: 0 }}
                 >
                   <defs>
                     {activitySeries.map((series) => (
@@ -696,21 +696,21 @@ export function AnalyticsWorkspace() {
                       <div key={step.label} className="flex items-start">
                         <div className="w-21 text-center">
                           <div
-                            className={`mx-auto flex size-8 items-center justify-center rounded-full ${
+                            className={`mx-auto flex size-10 items-center justify-center rounded-full ${
                               toneClasses[step.tone as keyof typeof toneClasses]
                             }`}
                           >
-                            <Icon className="size-4" />
+                            <Icon className="size-5" />
                           </div>
 
-                          <p className="mt-1.5 text-[11px] font-medium leading-tight text-foreground">
+                          <p className="mt-2 text-xs font-medium leading-tight text-foreground">
                             {step.label}
                           </p>
 
-                          <p className="mt-1.5 text-sm font-semibold tabular-nums">
+                          <p className="mt-1.5 text-base font-semibold tabular-nums">
                             {step.value}
                           </p>
-                          <p className="text-[11px] tabular-nums text-muted-foreground">
+                          <p className="text-xs tabular-nums text-muted-foreground">
                             {step.percentage}
                           </p>
 
