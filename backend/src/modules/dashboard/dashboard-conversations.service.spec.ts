@@ -152,6 +152,94 @@ describe('DashboardConversationsService', () => {
     expect(result.pagination.hasNextPage).toBe(false);
   });
 
+  it('resolves numeric employee selections using the menu active at that point', async () => {
+    prisma.chatSession.findUnique.mockResolvedValue({
+      id: 'session-1',
+    });
+
+    prisma.chatMessage.findMany.mockResolvedValue([
+      {
+        id: 'message-5',
+        direction: 'INBOUND',
+        messageType: 'TEXT',
+        content: '1',
+        sentByHrOfficerId: null,
+        sentByHrOfficer: null,
+        createdAt: new Date('2026-08-21T10:04:00.000Z'),
+      },
+      {
+        id: 'message-4',
+        direction: 'OUTBOUND',
+        messageType: 'SYSTEM',
+        content: 'STATE_TRANSITION:MAIN_MENU->LEAVE_MENU',
+        sentByHrOfficerId: null,
+        sentByHrOfficer: null,
+        createdAt: new Date('2026-08-21T10:03:00.000Z'),
+      },
+      {
+        id: 'message-3',
+        direction: 'INBOUND',
+        messageType: 'TEXT',
+        content: '2',
+        sentByHrOfficerId: null,
+        sentByHrOfficer: null,
+        createdAt: new Date('2026-08-21T10:02:00.000Z'),
+      },
+      {
+        id: 'message-2',
+        direction: 'OUTBOUND',
+        messageType: 'SYSTEM',
+        content: 'STATE_TRANSITION:POLICY_MENU->MAIN_MENU',
+        sentByHrOfficerId: null,
+        sentByHrOfficer: null,
+        createdAt: new Date('2026-08-21T10:01:30.000Z'),
+      },
+      {
+        id: 'message-1',
+        direction: 'INBOUND',
+        messageType: 'TEXT',
+        content: '2',
+        sentByHrOfficerId: null,
+        sentByHrOfficer: null,
+        createdAt: new Date('2026-08-21T10:01:00.000Z'),
+      },
+    ]);
+
+    const result = await service.getMessages('session-1');
+
+    expect(result.items.find((item) => item.id === 'message-1')?.displayContent).toBe(
+      '[2] Leave & Time Off',
+    );
+    expect(result.items.find((item) => item.id === 'message-3')?.displayContent).toBe(
+      '[2] Working Hours & Attendance',
+    );
+    expect(result.items.find((item) => item.id === 'message-5')?.displayContent).toBe(
+      '[1] Check My Leave Balance',
+    );
+  });
+
+  it('leaves an unresolved numeric employee selection unchanged', async () => {
+    prisma.chatSession.findUnique.mockResolvedValue({
+      id: 'session-1',
+    });
+
+    prisma.chatMessage.findMany.mockResolvedValue([
+      {
+        id: 'message-1',
+        direction: 'INBOUND',
+        messageType: 'TEXT',
+        content: '99',
+        sentByHrOfficerId: null,
+        sentByHrOfficer: null,
+        createdAt: new Date('2026-08-21T10:01:00.000Z'),
+      },
+    ]);
+
+    const result = await service.getMessages('session-1');
+
+    expect(result.items[0].displayContent).toBe('99');
+  });
+
   it('sends an HR reply for the officer assigned to the active escalation', async () => {
     prisma.chatSession.findUnique.mockResolvedValue({
       id: 'session-1',

@@ -342,7 +342,9 @@ function MessageHistory({ messages }: { messages: ConversationMessage[] }) {
         const senderChanged =
           previousMessage && previousSenderKey !== currentSenderKey;
 
-        const displayContent = formatConversationContent(message.content);
+        const displayContent = formatConversationContent(
+          message.displayContent ?? message.content,
+        );
 
         return (
           <div

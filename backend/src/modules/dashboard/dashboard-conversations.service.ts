@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EscalationStatus } from '../../generated/prisma/enums';
+import { MENU_CONFIG, MENU_IDS } from '../chat/menu.config';
 
 interface ConversationCursor {
   lastActivityAt: string;
@@ -254,11 +255,49 @@ export class DashboardConversationsService {
     });
 
     const hasNextPage = messages.length > take;
-    const items = hasNextPage ? messages.slice(0, take) : messages;
-    const lastItem = items[items.length - 1];
+    const pageItems = hasNextPage ? messages.slice(0, take) : messages;
+    const lastItem = pageItems[pageItems.length - 1];
+
+    /*
+     * Menu replies are not persisted as outbound ChatMessage records.
+     * State-transition system messages are persisted, however, so we can
+     * replay the deterministic menu state and resolve historical numeric
+     * employee selections against the menu that was active at that point.
+     *
+     * This deliberately uses MENU_CONFIG as the single source of truth.
+     */
+    const allMessages = await this.prisma.chatMessage.findMany({
+      where: {
+        sessionId,
+      },
+      orderBy: [
+        {
+          createdAt: 'asc',
+        },
+        {
+          id: 'asc',
+        },
+      ],
+      select: {
+        id: true,
+        direction: true,
+        messageType: true,
+        content: true,
+      },
+    });
+
+    const displayContentByMessageId = this.buildDisplayContentMap(allMessages);
+
+    const items = pageItems
+      .reverse()
+      .map((message) => ({
+        ...message,
+        displayContent:
+          displayContentByMessageId.get(message.id) ?? message.content,
+      }));
 
     return {
-      items: items.reverse(),
+      items,
       pagination: {
         limit: take,
         hasNextPage,
@@ -271,6 +310,93 @@ export class DashboardConversationsService {
             : null,
       },
     };
+  }
+
+  private buildDisplayContentMap(
+    messages: Array<{
+      id: string;
+      direction: string;
+      messageType: string;
+      content: string;
+    }>,
+  ): Map<string, string> {
+    const displayContentByMessageId = new Map<string, string>();
+    let currentState = 'MAIN_MENU';
+
+    for (const message of messages) {
+      const transition = this.parseStateTransition(message.content);
+
+      if (transition) {
+        currentState = transition.nextState;
+        continue;
+      }
+
+      if (
+        message.direction !== 'INBOUND' ||
+        message.messageType !== 'TEXT' ||
+        !/^\d+$/.test(message.content.trim())
+      ) {
+        continue;
+      }
+
+      const menuId = this.getMenuIdForState(currentState);
+
+      if (!menuId) {
+        continue;
+      }
+
+      const selectionNumber = Number(message.content.trim());
+
+      if (!Number.isInteger(selectionNumber) || selectionNumber < 1) {
+        continue;
+      }
+
+      const menu = MENU_CONFIG.find((candidate) => candidate.id === menuId);
+      const option = menu?.options[selectionNumber - 1];
+
+      if (option) {
+        displayContentByMessageId.set(
+          message.id,
+          `[${selectionNumber}] ${option.label}`,
+        );
+      }
+    }
+
+    return displayContentByMessageId;
+  }
+
+  private parseStateTransition(
+    content: string,
+  ): { previousState: string; nextState: string } | undefined {
+    const match = /^STATE_TRANSITION:([^->]+)->(.+)$/i.exec(content.trim());
+
+    if (!match) {
+      return undefined;
+    }
+
+    return {
+      previousState: match[1],
+      nextState: match[2],
+    };
+  }
+
+  private getMenuIdForState(state: string): string | undefined {
+    switch (state) {
+      case 'MAIN_MENU':
+        return MENU_IDS.MAIN;
+      case 'POLICY_MENU':
+        return MENU_IDS.POLICY;
+      case 'LEAVE_MENU':
+        return MENU_IDS.LEAVE;
+      case 'BENEFITS_MENU':
+        return MENU_IDS.BENEFITS;
+      case 'VERIFICATION_MENU':
+        return MENU_IDS.VERIFICATION;
+      case 'DOCUMENT_REQUEST_MENU':
+        return MENU_IDS.DOCUMENT_REQUEST;
+      default:
+        return undefined;
+    }
   }
 
   async replyToConversation(

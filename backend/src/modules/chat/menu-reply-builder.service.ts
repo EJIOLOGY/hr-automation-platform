@@ -43,6 +43,27 @@ export class MenuReplyBuilderService {
     };
   }
 
+  getSelectionLabel(menuId: string, selectionId: string): string | undefined {
+    const menu = this.findMenu(menuId);
+
+    if (!menu) {
+      return undefined;
+    }
+
+    const normalizedSelection = selectionId.trim().toLowerCase();
+
+    if (/^\d+$/.test(normalizedSelection)) {
+      const option = menu.options[Number(normalizedSelection) - 1];
+      return option?.label;
+    }
+
+    const option = menu.options.find(
+      (candidate) => candidate.id === normalizedSelection,
+    );
+
+    return option?.label;
+  }
+
   getSelection(menuId: string, selectionId: string): MenuSelection | undefined {
     const menu = this.findMenu(menuId);
 
