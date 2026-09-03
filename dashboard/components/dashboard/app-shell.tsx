@@ -42,7 +42,7 @@ export function AppShell({ children }: AppShellProps) {
       />
 
       {!isFullWorkspace && (
-        <aside className="min-h-0 overflow-hidden border border-dashed bg-card py-4 px-1.5 max-[760px]:hidden">
+        <aside className="min-h-0 overflow-hidden border border-dashed bg-card px-1.5 pr-0 max-[760px]:hidden">
           {showAccountMenu ? (
             <div id="account-menu" className="h-full">
               <AccountMenu onClose={() => setAccountMenuPath(null)} />

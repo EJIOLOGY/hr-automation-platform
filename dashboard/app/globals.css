@@ -161,6 +161,15 @@
     #16b5c4 100%
   );
 
+  --brand-blue-gradient-rev: linear-gradient(
+    320deg,
+    #2498e3 0%,
+    #087fd1 28%,
+    #0057b8 58%,
+    #119ccf 82%,
+    #16b5c4 100%
+  );
+
   /*
    * SECONDARY BRAND GRADIENT
    *
@@ -468,74 +477,52 @@
     background: var(--brand-blue-gradient);
   }
 
-  /* Secondary blue → teal gradient */
+  .bg-brand-blue-rev {
+    background: var(--brand-blue-gradient-rev);
+  }
 
+  /* Secondary blue → teal gradient */
   .bg-brand-blue-teal {
     background: var(--brand-blue-teal-gradient);
   }
-
   /* Soft HR response gradient */
-
   .bg-brand-hr {
     background: var(--message-hr-gradient);
-  }
-
-  /* Brand text */
-
+  } /* Brand text */
   .text-brand-blue {
     color: var(--brand-blue-deep);
-  }
-
-  /* Semantic INFO */
-
+  } /* Semantic INFO */
   .text-info {
     color: var(--info);
   }
-
   .border-info {
     border-color: var(--info);
   }
-
   .ring-info {
     --tw-ring-color: var(--info);
-  }
-
-  /* Semantic SUCCESS */
-
+  } /* Semantic SUCCESS */
   .text-success {
     color: var(--success);
   }
-
   .border-success {
     border-color: var(--success);
   }
-
   /* Semantic WARNING */
-
   .text-warning {
     color: var(--warning);
   }
-
   .border-warning {
     border-color: var(--warning);
-  }
-
-  /* Semantic DANGER */
-
+  } /* Semantic DANGER */
   .text-danger {
     color: var(--danger);
   }
-
   .border-danger {
     border-color: var(--danger);
-  }
-
-  /* Semantic NEUTRAL */
-
+  } /* Semantic NEUTRAL */
   .text-neutral {
     color: var(--neutral);
   }
-
   .border-neutral {
     border-color: var(--neutral);
   }

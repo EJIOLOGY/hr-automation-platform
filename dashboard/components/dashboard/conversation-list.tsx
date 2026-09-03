@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, MessageSquare, RefreshCw, Search } from "lucide-react";
 import { getConversations, type Conversation } from "@/lib/dashboard-api";
 import { ApiError } from "@/lib/auth-api";
@@ -18,6 +19,7 @@ const filters: { label: string; value: ConversationFilter }[] = [
 
 function isUnread(conversation: Conversation) {
   const { latestMessage, lastReadByHrAt } = conversation;
+
   return Boolean(
     latestMessage?.direction === "INBOUND" &&
     (!lastReadByHrAt ||
@@ -134,6 +136,9 @@ function ConversationListItem({
 }
 
 export function ConversationList() {
+  const searchParams = useSearchParams();
+  const conversationId = searchParams.get("conversationId");
+
   const [conversations, setConversations] = useState<Conversation[] | null>(
     null,
   );
@@ -141,7 +146,9 @@ export function ConversationList() {
   const [retryCount, setRetryCount] = useState(0);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ConversationFilter>("all");
+
   const { accessToken, refreshAuth } = useAuth();
+  const { selectConversation } = useConversationSelection();
 
   useEffect(() => {
     let active = true;
@@ -165,7 +172,6 @@ export function ConversationList() {
       } catch (err) {
         if (!active) return;
 
-        // Handle 401 unauthorized - refresh and retry
         if (err instanceof ApiError && err.status === 401) {
           try {
             const newToken = await refreshAuth();
@@ -175,7 +181,6 @@ export function ConversationList() {
               return;
             }
 
-            // Retry with new token
             const response = await getConversations(newToken);
 
             if (active) {
@@ -196,6 +201,20 @@ export function ConversationList() {
       active = false;
     };
   }, [accessToken, refreshAuth, retryCount]);
+
+  useEffect(() => {
+    if (!conversationId || !conversations) {
+      return;
+    }
+
+    const conversation = conversations.find(
+      (item) => item.id === conversationId,
+    );
+
+    if (conversation) {
+      selectConversation(conversation);
+    }
+  }, [conversationId, conversations, selectConversation]);
 
   const visibleConversations = useMemo(() => {
     if (!conversations) return [];

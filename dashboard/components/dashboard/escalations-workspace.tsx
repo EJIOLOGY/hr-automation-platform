@@ -2,12 +2,13 @@
 
 import {
   useEffect,
+  useRef,
   useState,
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, UserCheck } from "lucide-react";
+import { AlertTriangle, Check, MessageSquare, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   claimEscalation,
@@ -34,6 +35,23 @@ export function EscalationQueue() {
   const [items, setItems] = useState<EscalationRecord[] | null>(null);
   const [failed, setFailed] = useState(false);
 
+  const [showScrollbar, setShowScrollbar] = useState(false);
+  const scrollbarTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const handleScroll = () => {
+    setShowScrollbar(true);
+
+    if (scrollbarTimeoutRef.current) {
+      clearTimeout(scrollbarTimeoutRef.current);
+    }
+
+    scrollbarTimeoutRef.current = setTimeout(() => {
+      setShowScrollbar(false);
+    }, 5500);
+  };
+
   useEffect(() => {
     let active = true;
     if (!accessToken) return;
@@ -51,6 +69,14 @@ export function EscalationQueue() {
       active = false;
     };
   }, [accessToken, refreshKey, status]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollbarTimeoutRef.current) {
+        clearTimeout(scrollbarTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
@@ -81,15 +107,33 @@ export function EscalationQueue() {
           ))}
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2">
+
+      <div
+        onScroll={handleScroll}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-1 scrollbar-thin",
+          "[scrollbar-color:transparent_transparent]",
+          "[&::-webkit-scrollbar]:w-1.5",
+          "[&::-webkit-scrollbar-track]:bg-transparent",
+          "[&::-webkit-scrollbar-thumb]:rounded-full",
+          showScrollbar
+            ? "[&::-webkit-scrollbar-thumb]:bg-[#c4c4c4]"
+            : "[&::-webkit-scrollbar-thumb]:bg-transparent",
+          showScrollbar
+            ? "[scrollbar-color:#c4c4c4_transparent]"
+            : "[scrollbar-color:transparent_transparent]",
+        )}
+      >
         {items === null && !failed ? <QueueSkeleton /> : null}
         {failed ? <QueueError /> : null}
+
         {items?.length === 0 ? (
           <QueueEmpty
             title="No escalations"
             text="Escalated employee conversations will appear here."
           />
         ) : null}
+
         {items?.map((item) => (
           <button
             key={item.id}
@@ -97,7 +141,7 @@ export function EscalationQueue() {
             onClick={() => selectId(item.id)}
             className={cn(
               "w-full border-b border-border px-1 py-3 text-left transition-colors hover:bg-muted",
-              selectedId === item.id && "bg-primary/8",
+              selectedId === item.id && "rounded-md bg-primary/8",
             )}
           >
             <div className="flex items-center gap-2">
@@ -106,9 +150,11 @@ export function EscalationQueue() {
               </span>
               <StatusBadge status={item.status} />
             </div>
+
             <p className="mt-1 truncate text-[14px] leading-5 text-muted-foreground">
               {item.reason}
             </p>
+
             <p className="mt-1 text-[12px] text-muted-foreground">
               {formatDate(item.createdAt)}
             </p>
@@ -120,6 +166,7 @@ export function EscalationQueue() {
 }
 
 export function EscalationsWorkspace() {
+  const router = useRouter();
   const { accessToken, user } = useAuth();
   const { selectedId, refresh } = useOperationalQueue();
   const [item, setItem] = useState<EscalationRecord | null>(null);
@@ -129,15 +176,18 @@ export function EscalationsWorkspace() {
 
   useEffect(() => {
     let active = true;
+
     if (!selectedId || !accessToken) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setItem(null);
       setActionError("");
       return;
     }
+
     setItem(null);
     setFailed(false);
     setActionError("");
+
     getEscalation(selectedId, accessToken)
       .then((data) => {
         if (active) setItem(data);
@@ -145,6 +195,7 @@ export function EscalationsWorkspace() {
       .catch(() => {
         if (active) setFailed(true);
       });
+
     return () => {
       active = false;
     };
@@ -159,6 +210,7 @@ export function EscalationsWorkspace() {
       />
     );
   }
+
   if (!item && !failed) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -166,6 +218,7 @@ export function EscalationsWorkspace() {
       </div>
     );
   }
+
   if (failed || !item) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -181,8 +234,10 @@ export function EscalationsWorkspace() {
       setActionError("Authentication token is missing. Please log in again.");
       return;
     }
+
     setBusy(true);
     setActionError("");
+
     try {
       const result =
         action === "claim"
@@ -190,6 +245,7 @@ export function EscalationsWorkspace() {
           : action === "resolve"
             ? await resolveEscalation(item.id, accessToken)
             : await closeEscalation(item.id, accessToken);
+
       setItem(result);
       refresh();
     } catch (error) {
@@ -203,53 +259,73 @@ export function EscalationsWorkspace() {
     }
   };
 
+  const openConversation = () => {
+    router.push(
+      `/dashboard/conversations?conversationId=${encodeURIComponent(
+        item.session.id,
+      )}`,
+    );
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b border-border bg-card px-6 py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[13px] text-muted-foreground">Escalation</p>
+
             <h1 className="mt-0.5 truncate text-[18px] font-semibold">
               {item.employee.fullName}
             </h1>
+
             <p className="mt-1 text-[14px] text-muted-foreground">
               {item.employee.employeeNumber} · {item.employee.department}
             </p>
           </div>
+
           <StatusBadge status={item.status} />
         </div>
       </header>
+
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl space-y-6">
           <section>
             <p className="text-[13px] font-medium text-muted-foreground">
               Issue
             </p>
+
             <p className="mt-1 text-[15px] leading-6">{item.reason}</p>
           </section>
+
           <dl className="grid gap-5 sm:grid-cols-2">
             <Detail label="Category" value={item.category ?? "General HR"} />
+
             <Detail label="Received" value={formatDate(item.createdAt, true)} />
+
             <Detail
               label="Assigned to"
               value={item.assignedHrOfficer?.fullName ?? "Unassigned"}
             />
+
             <Detail
               label="Conversation"
               value={item.session.isActive ? "Active" : "Inactive"}
             />
           </dl>
+
           {item.resolutionNote ? (
             <section className="rounded-lg border border-border bg-card p-4">
               <p className="text-[13px] font-medium text-muted-foreground">
                 Resolution note
               </p>
+
               <p className="mt-1 text-[14px] leading-6">
                 {item.resolutionNote}
               </p>
             </section>
           ) : null}
-          <div className="border-t border-border pt-5">
+
+          <div className="border-t border-border pt-5 mt-15">
             {actionError ? (
               <p
                 role="alert"
@@ -258,7 +334,8 @@ export function EscalationsWorkspace() {
                 {actionError}
               </p>
             ) : null}
-            <div className="flex flex-wrap gap-2">
+
+            <div className="flex flex-wrap justify-self-auto items-center gap-4">
               {item.status === "OPEN" ||
               (item.status === "IN_PROGRESS" && !item.assignedHrOfficer) ? (
                 <ActionButton
@@ -271,13 +348,29 @@ export function EscalationsWorkspace() {
               ) : null}
 
               {item.status === "IN_PROGRESS" && isAssignedToUser ? (
-                <ActionButton
-                  onClick={() => runAction("resolve")}
-                  disabled={busy}
-                  icon={<Check className="size-4" />}
-                >
-                  Resolve
-                </ActionButton>
+                <>
+                  {item.session.isActive ? (
+                    <button
+                      type="button"
+                      onClick={openConversation}
+                      disabled={busy}
+                      className="inline-flex items-center gap-2 rounded-md bg-brand-blue-teal px-3 py-2 text-[14px] font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      <MessageSquare className="size-4" />
+                      Open conversation
+                    </button>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => runAction("resolve")}
+                    disabled={busy}
+                    className="inline-flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-[14px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-50"
+                  >
+                    <Check className="size-4" />
+                    Resolve
+                  </button>
+                </>
               ) : null}
 
               {(item.status === "IN_PROGRESS" || item.status === "RESOLVED") &&
@@ -286,7 +379,7 @@ export function EscalationsWorkspace() {
                   type="button"
                   onClick={() => runAction("close")}
                   disabled={busy}
-                  className="rounded-md border border-border px-3 py-2 text-[14px] font-medium hover:bg-muted disabled:opacity-50"
+                  className="inline-flex items-center bg-brand-blue-rev w-40 justify-center gap-2 rounded-md px-3 py-2 text-[14px] font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   Close escalation
                 </button>
@@ -306,6 +399,7 @@ function StatusBadge({ status }: { status: EscalationStatus }) {
     RESOLVED: "Resolved",
     CLOSED: "Closed",
   };
+
   return (
     <span
       className={cn(
@@ -348,6 +442,7 @@ function QueueEmpty({ title, text }: { title: string; text: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 text-center">
       <p className="text-[15px] font-semibold">{title}</p>
+
       <p className="mt-1 text-[14px] leading-5 text-muted-foreground">{text}</p>
     </div>
   );
@@ -368,7 +463,9 @@ function EmptyWorkspace({
         <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
           {icon}
         </span>
+
         <h1 className="mt-4 text-lg font-semibold">{title}</h1>
+
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p>
       </div>
     </div>
@@ -379,6 +476,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-[13px] text-muted-foreground">{label}</dt>
+
       <dd className="mt-1 text-[14px] font-medium">{value}</dd>
     </div>
   );
@@ -412,6 +510,11 @@ function formatDate(value: string, includeTime = false) {
           hour: "numeric",
           minute: "2-digit",
         }
-      : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
+      : {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        },
   ).format(new Date(value));
 }
