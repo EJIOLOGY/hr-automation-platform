@@ -21,6 +21,8 @@ export function AppShell({ children }: AppShellProps) {
   const [accountMenuPath, setAccountMenuPath] = useState<string | null>(null);
 
   const isAnalytics = pathname === "/dashboard/analytics";
+  const isAuditLogs = pathname === "/dashboard/hr-requests/audit-logs";
+  const isFullWorkspace = isAnalytics || isAuditLogs;
   const isConversations = pathname === "/dashboard/conversations";
   const isEscalations = pathname === "/dashboard/escalations";
   const isHrRequests =
@@ -39,7 +41,7 @@ export function AppShell({ children }: AppShellProps) {
         }
       />
 
-      {!isAnalytics && (
+      {!isFullWorkspace && (
         <aside className="min-h-0 overflow-hidden border border-dashed bg-card py-4 px-1.5 max-[760px]:hidden">
           {showAccountMenu ? (
             <div id="account-menu" className="h-full">
@@ -72,7 +74,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <main
       className={
-        isAnalytics
+        isFullWorkspace
           ? "grid h-dvh grid-cols-[8.7rem_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
           : "grid h-dvh grid-cols-[8.7rem_minmax(17rem,22rem)_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
       }

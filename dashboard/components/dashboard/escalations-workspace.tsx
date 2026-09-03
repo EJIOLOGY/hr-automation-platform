@@ -6,6 +6,7 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -187,8 +188,8 @@ export function EscalationsWorkspace() {
         action === "claim"
           ? await claimEscalation(item.id, accessToken)
           : action === "resolve"
-          ? await resolveEscalation(item.id, accessToken)
-          : await closeEscalation(item.id, accessToken);
+            ? await resolveEscalation(item.id, accessToken)
+            : await closeEscalation(item.id, accessToken);
       setItem(result);
       refresh();
     } catch (error) {
@@ -221,7 +222,9 @@ export function EscalationsWorkspace() {
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl space-y-6">
           <section>
-            <p className="text-[13px] font-medium text-muted-foreground">Issue</p>
+            <p className="text-[13px] font-medium text-muted-foreground">
+              Issue
+            </p>
             <p className="mt-1 text-[15px] leading-6">{item.reason}</p>
           </section>
           <dl className="grid gap-5 sm:grid-cols-2">
@@ -241,17 +244,23 @@ export function EscalationsWorkspace() {
               <p className="text-[13px] font-medium text-muted-foreground">
                 Resolution note
               </p>
-              <p className="mt-1 text-[14px] leading-6">{item.resolutionNote}</p>
+              <p className="mt-1 text-[14px] leading-6">
+                {item.resolutionNote}
+              </p>
             </section>
           ) : null}
           <div className="border-t border-border pt-5">
             {actionError ? (
-              <p role="alert" className="mb-3 text-[13px] leading-5 text-danger">
+              <p
+                role="alert"
+                className="mb-3 text-[13px] leading-5 text-danger"
+              >
                 {actionError}
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              {item.status === "OPEN" ? (
+              {item.status === "OPEN" ||
+              (item.status === "IN_PROGRESS" && !item.assignedHrOfficer) ? (
                 <ActionButton
                   onClick={() => runAction("claim")}
                   disabled={busy}
@@ -260,6 +269,7 @@ export function EscalationsWorkspace() {
                   Claim escalation
                 </ActionButton>
               ) : null}
+
               {item.status === "IN_PROGRESS" && isAssignedToUser ? (
                 <ActionButton
                   onClick={() => runAction("resolve")}
@@ -269,8 +279,9 @@ export function EscalationsWorkspace() {
                   Resolve
                 </ActionButton>
               ) : null}
+
               {(item.status === "IN_PROGRESS" || item.status === "RESOLVED") &&
-              isAssignedToUser ? (
+              (!item.assignedHrOfficer || isAssignedToUser) ? (
                 <button
                   type="button"
                   onClick={() => runAction("close")}
@@ -302,8 +313,8 @@ function StatusBadge({ status }: { status: EscalationStatus }) {
         status === "OPEN"
           ? "bg-warning/10 text-warning"
           : status === "IN_PROGRESS"
-          ? "bg-info/10 text-info"
-          : "bg-muted text-muted-foreground",
+            ? "bg-info/10 text-info"
+            : "bg-muted text-muted-foreground",
       )}
     >
       {labels[status]}
