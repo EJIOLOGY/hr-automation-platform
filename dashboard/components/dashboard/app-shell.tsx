@@ -23,7 +23,9 @@ export function AppShell({ children }: AppShellProps) {
   const isAnalytics = pathname === "/dashboard/analytics";
   const isConversations = pathname === "/dashboard/conversations";
   const isEscalations = pathname === "/dashboard/escalations";
-  const isHrRequests = pathname === "/dashboard/hr-requests";
+  const isHrRequests =
+    pathname === "/dashboard/hr-requests" ||
+    pathname.startsWith("/dashboard/hr-requests/");
   const showAccountMenu = accountMenuPath === pathname && !isAnalytics;
 
   const content = (

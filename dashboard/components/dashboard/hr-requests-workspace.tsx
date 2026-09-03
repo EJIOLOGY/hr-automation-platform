@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClipboardList } from "lucide-react";
+import Link from "next/link";
+import { ClipboardList, ScrollText } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   getHrRequest,
@@ -28,6 +29,7 @@ export function HrRequestsQueue() {
   useEffect(() => {
     let active = true;
     if (!accessToken) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setItems(null);
     setFailed(false);
     getHrRequests(accessToken, status)
@@ -45,7 +47,17 @@ export function HrRequestsQueue() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <header className="shrink-0 border-b border-border px-2 py-4">
-        <h1 className="text-[20px] font-semibold leading-7">HR Requests</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-[20px] font-semibold leading-7">HR Requests</h1>
+          <Link
+            href="/dashboard/hr-requests/audit-logs"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title="View Audit Log"
+          >
+            <ScrollText className="size-3.5" />
+            <span>Audit Log</span>
+          </Link>
+        </div>
         <p className="mt-0.5 text-[14px] leading-5 text-muted-foreground">
           Incoming HR Document Requests.
         </p>
@@ -123,6 +135,7 @@ export function HrRequestsWorkspace() {
   useEffect(() => {
     let active = true;
     if (!selectedId || !accessToken) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItem(null);
       return;
     }
@@ -178,7 +191,16 @@ export function HrRequestsWorkspace() {
               Requested by {item.employee.fullName}
             </p>
           </div>
-          <Badge status={item.status} />
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/hr-requests/audit-logs"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <ScrollText className="size-3.5" />
+              View Audit Log
+            </Link>
+            <Badge status={item.status} />
+          </div>
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
@@ -281,6 +303,15 @@ function EmptyWorkspace({ title, text }: { title: string; text: string }) {
         </span>
         <h1 className="mt-4 text-lg font-semibold">{title}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p>
+        <div className="mt-5">
+          <Link
+            href="/dashboard/hr-requests/audit-logs"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3.5 py-2 text-[13px] font-medium text-foreground shadow-xs hover:bg-muted transition-colors"
+          >
+            <ScrollText className="size-4 text-muted-foreground" />
+            View Audit Log
+          </Link>
+        </div>
       </div>
     </div>
   );

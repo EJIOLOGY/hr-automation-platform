@@ -4,6 +4,6 @@ import { PolicyController } from './policy.controller';
 
 @Module({
   providers: [PolicyService],
-  controllers: [PolicyController]
+  controllers: [PolicyController],
 })
 export class PolicyModule {}

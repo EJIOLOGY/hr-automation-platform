@@ -13,9 +13,7 @@ describe('HrDocumentRequestService', () => {
   });
 
   it('creates a supported document request definition', () => {
-    expect(
-      service.createRequest('employment_verification_letter'),
-    ).toEqual({
+    expect(service.createRequest('employment_verification_letter')).toEqual({
       id: 'employment_verification_letter',
       label: 'Employment Verification Letter (EVL)',
     });

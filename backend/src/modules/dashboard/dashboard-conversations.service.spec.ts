@@ -297,10 +297,7 @@ describe('DashboardConversationsService', () => {
 
     auditService.log.mockResolvedValue({ id: 'audit-2' });
 
-    const result = await service.markConversationRead(
-      'session-1',
-      'officer-1',
-    );
+    const result = await service.markConversationRead('session-1', 'officer-1');
 
     expect(result).toEqual({
       id: 'session-1',

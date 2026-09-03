@@ -36,6 +36,7 @@ export function EscalationQueue() {
   useEffect(() => {
     let active = true;
     if (!accessToken) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setItems(null);
     setFailed(false);
     getEscalations(accessToken, status)
@@ -128,6 +129,7 @@ export function EscalationsWorkspace() {
   useEffect(() => {
     let active = true;
     if (!selectedId || !accessToken) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItem(null);
       setActionError("");
       return;

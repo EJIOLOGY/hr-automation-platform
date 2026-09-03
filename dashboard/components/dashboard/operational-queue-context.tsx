@@ -19,7 +19,7 @@ export function OperationalQueueProvider({ children }: { children: ReactNode }) 
     selectId: setSelectedId,
     refreshKey,
     refresh: () => setRefreshKey((key) => key + 1),
-  }), [refreshKey]);
+  }), [selectedId, refreshKey]);
 
   return <OperationalQueueContext.Provider value={value}>{children}</OperationalQueueContext.Provider>;
 }

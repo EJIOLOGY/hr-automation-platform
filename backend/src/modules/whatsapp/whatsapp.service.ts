@@ -24,6 +24,8 @@ export class WhatsappService {
       this.messageMapper.toInbound(message),
     );
 
-    return response.replies.map((reply) => this.messageMapper.toOutbound(reply));
+    return response.replies.map((reply) =>
+      this.messageMapper.toOutbound(reply),
+    );
   }
 }

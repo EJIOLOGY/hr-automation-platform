@@ -128,5 +128,4 @@ describe('MenuReplyBuilderService', () => {
       action: 'request_document',
     });
   });
-
 });

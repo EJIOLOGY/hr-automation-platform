@@ -4,6 +4,6 @@ import { BenefitsController } from './benefits.controller';
 
 @Module({
   providers: [BenefitsService],
-  controllers: [BenefitsController]
+  controllers: [BenefitsController],
 })
 export class BenefitsModule {}

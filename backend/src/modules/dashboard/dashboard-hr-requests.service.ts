@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { EscalationStatus } from '../../generated/prisma/enums';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { HR_DOCUMENT_REQUEST_TYPES } from './dashboard-hr-requests.dto';
@@ -95,7 +99,8 @@ export class DashboardHrRequestsService {
 
     const hasMore = rows.length > limit;
     const items = rows.slice(0, limit).map((row) => this.toView(row));
-    const last = rows.length > 0 ? rows[Math.min(limit, rows.length) - 1] : undefined;
+    const last =
+      rows.length > 0 ? rows[Math.min(limit, rows.length) - 1] : undefined;
 
     return {
       items,
@@ -180,7 +185,7 @@ export class DashboardHrRequestsService {
     const normalized = value.trim().toLowerCase();
     const documentType = DOCUMENT_TYPES.find((type) => type.id === normalized);
 
-    if (!documentType || !HR_DOCUMENT_REQUEST_TYPES.includes(documentType.id as (typeof HR_DOCUMENT_REQUEST_TYPES)[number])) {
+    if (!documentType || !HR_DOCUMENT_REQUEST_TYPES.includes(documentType.id)) {
       throw new BadRequestException('Invalid documentType.');
     }
 

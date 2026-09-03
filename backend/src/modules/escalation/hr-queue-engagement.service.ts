@@ -1,6 +1,15 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
-import { EscalationStatus, MessageDirection, MessageType } from '../../generated/prisma/enums';
+import {
+  EscalationStatus,
+  MessageDirection,
+  MessageType,
+} from '../../generated/prisma/enums';
 
 export const QUEUE_ENGAGEMENT_PREFIX = 'HR_QUEUE_ENGAGEMENT:';
 
@@ -131,8 +140,7 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
 
     if (!lastEngagement) {
       return (
-        now.getTime() - escalationCreatedAt.getTime() >=
-        FIRST_MESSAGE_DELAY_MS
+        now.getTime() - escalationCreatedAt.getTime() >= FIRST_MESSAGE_DELAY_MS
       );
     }
 

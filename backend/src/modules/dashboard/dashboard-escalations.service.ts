@@ -175,13 +175,17 @@ export class DashboardEscalationsService {
       escalation.assignedHrOfficerId &&
       escalation.assignedHrOfficerId !== input.hrOfficerId
     ) {
-      throw new ConflictException('This escalation is already assigned to another HR officer.');
+      throw new ConflictException(
+        'This escalation is already assigned to another HR officer.',
+      );
     }
 
     const started = await this.escalationService.startHandling(id);
 
     if (started.status !== EscalationStatus.IN_PROGRESS) {
-      throw new ConflictException('This escalation cannot be claimed while another HR request is in progress.');
+      throw new ConflictException(
+        'This escalation cannot be claimed while another HR request is in progress.',
+      );
     }
 
     const updated = await this.prisma.escalation.update({
@@ -229,14 +233,18 @@ export class DashboardEscalationsService {
     const escalation = await this.getById(id);
 
     if (escalation.status !== EscalationStatus.IN_PROGRESS) {
-      throw new ConflictException('Only an escalation in progress can be resolved.');
+      throw new ConflictException(
+        'Only an escalation in progress can be resolved.',
+      );
     }
 
     if (
       escalation.assignedHrOfficerId &&
       escalation.assignedHrOfficerId !== input.hrOfficerId
     ) {
-      throw new ConflictException('This escalation is assigned to another HR officer.');
+      throw new ConflictException(
+        'This escalation is assigned to another HR officer.',
+      );
     }
 
     const resolutionNote = this.normalizeResolutionNote(input.resolutionNote);
@@ -246,7 +254,8 @@ export class DashboardEscalationsService {
       where: { id },
       data: {
         resolutionNote: resolutionNote ?? undefined,
-        assignedHrOfficerId: escalation.assignedHrOfficerId ?? input.hrOfficerId,
+        assignedHrOfficerId:
+          escalation.assignedHrOfficerId ?? input.hrOfficerId,
       },
       include: {
         employee: {
@@ -297,14 +306,18 @@ export class DashboardEscalationsService {
       escalation.status !== EscalationStatus.IN_PROGRESS &&
       escalation.status !== EscalationStatus.RESOLVED
     ) {
-      throw new ConflictException('Only an escalation in progress or resolved can be closed.');
+      throw new ConflictException(
+        'Only an escalation in progress or resolved can be closed.',
+      );
     }
 
     if (
       escalation.assignedHrOfficerId &&
       escalation.assignedHrOfficerId !== input.hrOfficerId
     ) {
-      throw new ConflictException('This escalation is assigned to another HR officer.');
+      throw new ConflictException(
+        'This escalation is assigned to another HR officer.',
+      );
     }
 
     const resolutionNote = this.normalizeResolutionNote(input.resolutionNote);
@@ -314,7 +327,8 @@ export class DashboardEscalationsService {
       where: { id },
       data: {
         resolutionNote: resolutionNote ?? undefined,
-        assignedHrOfficerId: escalation.assignedHrOfficerId ?? input.hrOfficerId,
+        assignedHrOfficerId:
+          escalation.assignedHrOfficerId ?? input.hrOfficerId,
       },
       include: {
         employee: {
@@ -368,7 +382,9 @@ export class DashboardEscalationsService {
   private normalizeResolutionNote(value?: string) {
     const note = value?.trim();
     if (note && note.length > 2000) {
-      throw new BadRequestException('resolutionNote must not exceed 2000 characters.');
+      throw new BadRequestException(
+        'resolutionNote must not exceed 2000 characters.',
+      );
     }
     return note || undefined;
   }
@@ -379,7 +395,9 @@ export class DashboardEscalationsService {
 
   private decodeCursor(value: string): EscalationCursor {
     try {
-      const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<EscalationCursor>;
+      const decoded = JSON.parse(
+        Buffer.from(value, 'base64url').toString('utf8'),
+      ) as Partial<EscalationCursor>;
       if (
         typeof decoded.id !== 'string' ||
         typeof decoded.createdAt !== 'string' ||

@@ -1,8 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EscalationService } from './escalation.service';
-import { HrQueueEngagementService, QUEUE_ENGAGEMENT_PREFIX } from './hr-queue-engagement.service';
-import { EscalationStatus, MessageDirection, MessageType } from '../../generated/prisma/enums';
+import {
+  HrQueueEngagementService,
+  QUEUE_ENGAGEMENT_PREFIX,
+} from './hr-queue-engagement.service';
+import {
+  EscalationStatus,
+  MessageDirection,
+  MessageType,
+} from '../../generated/prisma/enums';
 
 describe('HrQueueEngagementService', () => {
   let service: HrQueueEngagementService;
@@ -217,10 +224,7 @@ describe('EscalationService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EscalationService,
-        { provide: PrismaService, useValue: {} },
-      ],
+      providers: [EscalationService, { provide: PrismaService, useValue: {} }],
     }).compile();
 
     service = module.get<EscalationService>(EscalationService);

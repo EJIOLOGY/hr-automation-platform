@@ -58,7 +58,7 @@ export type EscalationStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
  */
 export type HrRequestStatus = EscalationStatus;
 
-interface QueueEmployee extends ConversationEmployee {}
+type QueueEmployee = ConversationEmployee;
 
 interface AssignedHrOfficer {
   id: string;
@@ -94,7 +94,25 @@ export interface HrRequestRecord extends Omit<EscalationRecord, "documentType"> 
   status: HrRequestStatus;
 }
 
-interface CursorListResponse<T> {
+export interface AuditLogActor {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+}
+
+export interface AuditLogRecord {
+  id: string;
+  actorType: string;
+  actor: AuditLogActor | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  createdAt: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface CursorListResponse<T> {
   items: T[];
   nextCursor: string | null;
 }
@@ -200,6 +218,18 @@ export async function getHrRequest(
   accessToken: string,
 ): Promise<HrRequestRecord> {
   return dashboardRequest(`/dashboard/hr-requests/${id}`, accessToken);
+}
+
+export async function getAuditLogs(
+  accessToken: string,
+  cursor?: string,
+  limit?: number,
+): Promise<CursorListResponse<AuditLogRecord>> {
+  const params = new URLSearchParams();
+  if (cursor) params.set("cursor", cursor);
+  if (limit) params.set("limit", limit.toString());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return dashboardRequest(`/dashboard/audit-logs${query}`, accessToken);
 }
 
 async function dashboardRequest<T>(

@@ -12,6 +12,7 @@ import { DashboardEscalationsController } from './dashboard-escalations.controll
 import { DashboardEscalationsService } from './dashboard-escalations.service';
 import { DashboardHrRequestsController } from './dashboard-hr-requests.controller';
 import { DashboardHrRequestsService } from './dashboard-hr-requests.service';
+import { DashboardAuditLogsController } from './dashboard-audit-logs.controller';
 
 @Module({
   imports: [PrismaModule, AuthModule, AuditModule, EscalationModule],
@@ -20,6 +21,7 @@ import { DashboardHrRequestsService } from './dashboard-hr-requests.service';
     DashboardConversationsController,
     DashboardEscalationsController,
     DashboardHrRequestsController,
+    DashboardAuditLogsController,
   ],
   providers: [
     DashboardService,
