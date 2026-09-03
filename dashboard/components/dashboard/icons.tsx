@@ -90,7 +90,9 @@ export function IconGrid({ className }: IconProps) {
 export function IconMessage({ className }: IconProps) {
   return (
     <Svg className={className}>
-      <path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H9l-4.2 3.2a.6.6 0 0 1-.96-.48V16.5H4A1.5 1.5 0 0 1 2.5 15V7A1.5 1.5 0 0 1 4 5.5Z" />
+      <path d="M5 7.5H4.5A3.5 3.5 0 0 0 1 11v5.5A3.5 3.5 0 0 0 4.5 20H7v2l3.5-2H15a3.5 3.5 0 0 0 3.5-3.5" />
+      <rect x="6.5" y="2.5" width="16" height="14.5" rx="3.5" />
+      <path d="M10 7.5c1.8 1.4 3.5 2.2 5 2.2s3.2-.8 5-2.2" />
     </Svg>
   );
 }

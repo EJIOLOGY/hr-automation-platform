@@ -682,12 +682,11 @@ export function AnalyticsWorkspace() {
         {/* Lower analytics */}
         <div className="space-y-3">
           <section className="grid gap-3 lg:grid-cols-[1.65fr_1fr]">
-            <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+            <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card p-3 shadow-sm">
               <h3 className="text-sm font-semibold tracking-tight">
                 Conversation Journey
               </h3>
-
-              <div className="mt-3 overflow-x-auto">
+              <div className="mt-3 flex min-h-0 flex-1 items-center overflow-x-auto">
                 <div className="flex min-w-140 items-start justify-between gap-1 px-1">
                   {journeySteps.map((step, index) => {
                     const Icon = step.icon;
@@ -732,7 +731,6 @@ export function AnalyticsWorkspace() {
                   })}
                 </div>
               </div>
-
               <div className="mt-3 grid grid-cols-2 border-t border-border pt-2.5">
                 <div>
                   <p className="text-xs text-muted-foreground">
