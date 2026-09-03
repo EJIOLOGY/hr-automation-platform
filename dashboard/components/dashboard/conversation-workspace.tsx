@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Bot,
   MessageSquareText,
   RefreshCw,
   SendHorizontal,
+  UserRound,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -326,37 +328,67 @@ function MessageHistory({ messages }: { messages: ConversationMessage[] }) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col">
       {messages.map((message, index) => {
-        const isOutbound = message.direction === "OUTBOUND";
-
+        const isEmployeeMessage = message.direction === "INBOUND";
+        const isHrMessage =
+          message.direction === "OUTBOUND" &&
+          Boolean(message.sentByHrOfficerId);
         const previousMessage = messages[index - 1];
 
+        const previousSenderKey = previousMessage
+          ? (previousMessage.sentByHrOfficerId ?? previousMessage.direction)
+          : null;
+        const currentSenderKey = message.sentByHrOfficerId ?? message.direction;
+
         const senderChanged =
-          previousMessage && previousMessage.direction !== message.direction;
+          previousMessage && previousSenderKey !== currentSenderKey;
+
+        const displayContent = formatConversationContent(message.content);
 
         return (
           <div
             key={message.id}
             className={cn(
               "flex",
-              isOutbound ? "justify-end" : "justify-start",
+              isEmployeeMessage ? "justify-start" : "justify-end",
               index === 0 ? "" : senderChanged ? "mt-3" : "mt-1.5",
             )}
           >
             <article
               className={cn(
                 "min-w-0 max-w-[75%] rounded-[14px] border px-3.5 py-2.5 shadow-sm",
-                isOutbound
-                  ? "border-[#CFE5E3] bg-[linear-gradient(135deg,#EAF5FF_0%,#D6F3EE_100%)] text-[#172033]"
-                  : "border-[#E3E8EE] bg-white text-[#172033]",
+                isEmployeeMessage
+                  ? "border-[#E3E8EE] bg-white text-[#172033]"
+                  : "border-[#CFE5E3] bg-[linear-gradient(135deg,#EAF5FF_0%,#D6F3EE_100%)] text-[#172033]",
               )}
             >
+              {!isEmployeeMessage ? (
+                <div
+                  className={cn(
+                    "mb-1 flex items-center gap-1.5 text-[12px] font-semibold leading-4",
+                    isHrMessage ? "text-[#0B6B63]" : "text-[#0057B8]",
+                  )}
+                >
+                  {isHrMessage ? (
+                    <UserRound className="size-3.5" aria-hidden="true" />
+                  ) : (
+                    <Bot className="size-3.5" aria-hidden="true" />
+                  )}
+
+                  <span>
+                    {isHrMessage
+                      ? message.sentByHrOfficer?.fullName || "HR Personnel"
+                      : "Bot"}
+                  </span>
+                </div>
+              ) : null}
+
               <p className="whitespace-pre-wrap wrap-break-word text-[14px] leading-5">
-                {message.content}
+                {displayContent}
               </p>
 
               <time
                 dateTime={message.createdAt}
-                className="mt-1 block text-right text-[11px] leading-4 tabular-nums text-[#687586]"
+                className="float-right ml-2 mt-1 text-[11px] leading-4 tabular-nums text-[#687586]"
               >
                 {formatMessageTimestamp(message.createdAt)}
               </time>
@@ -366,6 +398,14 @@ function MessageHistory({ messages }: { messages: ConversationMessage[] }) {
       })}
     </div>
   );
+}
+
+function formatConversationContent(content: string) {
+  return content
+    .replace(/^HR_QUEUE_ENGAGEMENT:\s*/i, "")
+    .replace(/^HR_QUEUE:\s*/i, "")
+    .replace(/^ESCALATION:\s*/i, "")
+    .trim();
 }
 
 function MessageHistorySkeleton() {

@@ -8,12 +8,21 @@ export interface ConversationEmployee {
   status: string;
 }
 
+export interface ConversationHrOfficer {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+}
+
 export interface ConversationPreview {
   id: string;
   direction: "INBOUND" | "OUTBOUND";
   messageType: string;
   content: string;
+  displayContent?: string;
   sentByHrOfficerId: string | null;
+  sentByHrOfficer: ConversationHrOfficer | null;
   createdAt: string;
 }
 
@@ -88,7 +97,10 @@ export interface EscalationRecord {
   session: QueueSession;
 }
 
-export interface HrRequestRecord extends Omit<EscalationRecord, "documentType"> {
+export interface HrRequestRecord extends Omit<
+  EscalationRecord,
+  "documentType"
+> {
   documentType: string | null;
   documentLabel: string | null;
   status: HrRequestStatus;
@@ -143,9 +155,13 @@ export async function markConversationRead(
   sessionId: string,
   accessToken: string,
 ): Promise<void> {
-  await dashboardRequest(`/dashboard/conversations/${sessionId}/read`, accessToken, {
-    method: "POST",
-  });
+  await dashboardRequest(
+    `/dashboard/conversations/${sessionId}/read`,
+    accessToken,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function sendConversationMessage(
