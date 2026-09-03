@@ -13,6 +13,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth/auth-provider";
 
 interface NavigationItem {
   label: string;
@@ -36,11 +37,25 @@ interface NavigationRailProps {
   onAccountMenuToggle: () => void;
 }
 
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) return "HR";
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[parts.length - 1][0]}${parts[0][0]}`.toUpperCase();
+}
+
 export function NavigationRail({
   isAccountMenuOpen,
   onAccountMenuToggle,
 }: NavigationRailProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const fullName = user?.fullName ?? "";
 
   return (
     <nav
@@ -84,26 +99,19 @@ export function NavigationRail({
           onClick={onAccountMenuToggle}
           aria-expanded={isAccountMenuOpen}
           aria-controls="account-menu"
-          className="flex w-full items-center gap-2 rounded-xl py-2 text-left text-white transition-colors hover:bg-white/10"
+          className="flex w-full items-center justify-center gap-1 rounded-xl py-2 text-white transition-colors hover:bg-white/10"
         >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-base font-semibold text-brand-blue">
-            TG
-          </span>
-
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold">
-              HR Officer
+          <div className="flex flex-col items-center">
+            <span className="flex size-12 items-center justify-center rounded-full bg-white text-base font-semibold text-brand-blue">
+              {getInitials(fullName)}
             </span>
 
-            <span className="block truncate text-xs text-white/75">
-              Administrator
+            <span className="mt-2 text-center">
+              <span className="block text-sm font-semibold leading-tight">
+                Administrator
+              </span>
             </span>
-
-            <span className="mt-0.5 flex items-center gap-1.5 text-xs text-white/80">
-              <span className="size-2 shrink-0 rounded-full bg-success" />
-              Online
-            </span>
-          </span>
+          </div>
 
           {isAccountMenuOpen ? (
             <ChevronUp className="size-3.5 shrink-0 text-white/80" />
