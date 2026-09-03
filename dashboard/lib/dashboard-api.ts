@@ -52,6 +52,12 @@ export interface ConversationMessagesResponse {
 
 export type EscalationStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 
+/**
+ * In the backend, HR document requests are modeled as Escalation records
+ * with category 'DOCUMENT_REQUEST' and share the EscalationStatus enum lifecycle.
+ */
+export type HrRequestStatus = EscalationStatus;
+
 interface QueueEmployee extends ConversationEmployee {}
 
 interface AssignedHrOfficer {
@@ -85,6 +91,7 @@ export interface EscalationRecord {
 export interface HrRequestRecord extends Omit<EscalationRecord, "documentType"> {
   documentType: string | null;
   documentLabel: string | null;
+  status: HrRequestStatus;
 }
 
 interface CursorListResponse<T> {
@@ -182,7 +189,7 @@ export async function closeEscalation(
 
 export async function getHrRequests(
   accessToken: string,
-  status?: EscalationStatus,
+  status?: HrRequestStatus,
 ): Promise<CursorListResponse<HrRequestRecord>> {
   const query = status ? `?status=${status}` : "";
   return dashboardRequest(`/dashboard/hr-requests${query}`, accessToken);
@@ -222,7 +229,21 @@ async function dashboardRequest<T>(
   }
 
   if (!response.ok) {
-    throw new Error("Unable to complete this conversation request.");
+    let message = "Unable to complete this request.";
+    try {
+      const errorData = await response.json();
+      if (typeof errorData?.message === "string") {
+        message = errorData.message;
+      } else if (
+        Array.isArray(errorData?.message) &&
+        errorData.message.length > 0
+      ) {
+        message = errorData.message.join(", ");
+      }
+    } catch {
+      // Keep default message if response body is not JSON
+    }
+    throw new Error(message);
   }
 
   if (response.status === 204) {

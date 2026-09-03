@@ -3,31 +3,309 @@
 import { useEffect, useState } from "react";
 import { ClipboardList } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { getHrRequest, getHrRequests, type EscalationStatus, type HrRequestRecord } from "@/lib/dashboard-api";
+import {
+  getHrRequest,
+  getHrRequests,
+  type HrRequestRecord,
+  type HrRequestStatus,
+} from "@/lib/dashboard-api";
 import { cn } from "@/lib/utils";
 import { useOperationalQueue } from "./operational-queue-context";
 
-const filters: Array<{ label: string; value?: EscalationStatus }> = [{ label: "All" }, { label: "Open", value: "OPEN" }, { label: "In progress", value: "IN_PROGRESS" }];
+const filters: Array<{ label: string; value?: HrRequestStatus }> = [
+  { label: "All" },
+  { label: "Open", value: "OPEN" },
+  { label: "In progress", value: "IN_PROGRESS" },
+];
 
 export function HrRequestsQueue() {
-  const { accessToken } = useAuth(); const { selectedId, selectId, refreshKey } = useOperationalQueue();
-  const [status, setStatus] = useState<EscalationStatus | undefined>(); const [items, setItems] = useState<HrRequestRecord[] | null>(null); const [failed, setFailed] = useState(false);
-  useEffect(() => { let active = true; if (!accessToken) return; setItems(null); setFailed(false); getHrRequests(accessToken, status).then((data) => { if (active) setItems(data.items); }).catch(() => { if (active) setFailed(true); }); return () => { active = false; }; }, [accessToken, refreshKey, status]);
-  return <div className="flex h-full min-h-0 flex-col bg-card"><header className="shrink-0 border-b border-border px-2 py-4"><h1 className="text-[20px] font-semibold leading-7">HR Requests</h1><p className="mt-0.5 text-[14px] leading-5 text-muted-foreground">Incoming HR Document Requests.</p><div className="mt-3 flex gap-1" role="group" aria-label="HR request filters">{filters.map((filter) => <button key={filter.label} type="button" onClick={() => setStatus(filter.value)} className={cn("rounded-md px-2.5 py-1 text-[14px] font-medium", status === filter.value ? "bg-brand-hr text-chat-filter-active-foreground" : "text-muted-foreground hover:bg-muted")}>{filter.label}</button>)}</div></header><div className="min-h-0 flex-1 overflow-y-auto px-2">{items === null && !failed ? <Skeleton /> : null}{failed ? <Empty title="Couldn’t load HR requests" text="Please refresh the page and try again." /> : null}{items?.length === 0 ? <Empty title="No HR requests" text="Document requests from employees will appear here." /> : null}{items?.map((item) => <button key={item.id} type="button" onClick={() => selectId(item.id)} className={cn("w-full border-b border-border px-1 py-3 text-left transition-colors hover:bg-muted", selectedId === item.id && "bg-primary/8")}><div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{item.employee.fullName}</span><Badge status={item.status} /></div><p className="mt-1 truncate text-[14px] leading-5 text-muted-foreground">{item.documentLabel ?? item.documentType ?? item.reason}</p><p className="mt-1 text-[12px] text-muted-foreground">{formatDate(item.createdAt)}</p></button>)}</div></div>;
+  const { accessToken } = useAuth();
+  const { selectedId, selectId, refreshKey } = useOperationalQueue();
+  const [status, setStatus] = useState<HrRequestStatus | undefined>();
+  const [items, setItems] = useState<HrRequestRecord[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!accessToken) return;
+    setItems(null);
+    setFailed(false);
+    getHrRequests(accessToken, status)
+      .then((data) => {
+        if (active) setItems(data.items);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [accessToken, refreshKey, status]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <header className="shrink-0 border-b border-border px-2 py-4">
+        <h1 className="text-[20px] font-semibold leading-7">HR Requests</h1>
+        <p className="mt-0.5 text-[14px] leading-5 text-muted-foreground">
+          Incoming HR Document Requests.
+        </p>
+        <div
+          className="mt-3 flex gap-1"
+          role="group"
+          aria-label="HR request filters"
+        >
+          {filters.map((filter) => (
+            <button
+              key={filter.label}
+              type="button"
+              onClick={() => setStatus(filter.value)}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-[14px] font-medium",
+                status === filter.value
+                  ? "bg-brand-hr text-chat-filter-active-foreground"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2">
+        {items === null && !failed ? <Skeleton /> : null}
+        {failed ? (
+          <Empty
+            title="Couldn’t load HR requests"
+            text="Please refresh the page and try again."
+          />
+        ) : null}
+        {items?.length === 0 ? (
+          <Empty
+            title="No HR requests"
+            text="Document requests from employees will appear here."
+          />
+        ) : null}
+        {items?.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => selectId(item.id)}
+            className={cn(
+              "w-full border-b border-border px-1 py-3 text-left transition-colors hover:bg-muted",
+              selectedId === item.id && "bg-primary/8",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">
+                {item.employee.fullName}
+              </span>
+              <Badge status={item.status} />
+            </div>
+            <p className="mt-1 truncate text-[14px] leading-5 text-muted-foreground">
+              {item.documentLabel ?? item.documentType ?? item.reason}
+            </p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              {formatDate(item.createdAt)}
+            </p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function HrRequestsWorkspace() {
-  const { accessToken } = useAuth(); const { selectedId } = useOperationalQueue(); const [item, setItem] = useState<HrRequestRecord | null>(null); const [failed, setFailed] = useState(false);
-  useEffect(() => { let active = true; if (!selectedId || !accessToken) { setItem(null); return; } setItem(null); setFailed(false); getHrRequest(selectedId, accessToken).then((data) => { if (active) setItem(data); }).catch(() => { if (active) setFailed(true); }); return () => { active = false; }; }, [accessToken, selectedId]);
-  if (!selectedId) return <EmptyWorkspace title="Select an HR request" text="Choose a request from the queue to review the employee and requested document." />;
-  if (!item && !failed) return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading HR request…</div>;
-  if (failed || !item) return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Couldn’t load this HR request.</div>;
-  return <div className="flex h-full min-h-0 flex-col bg-background"><header className="shrink-0 border-b border-border bg-card px-6 py-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-[13px] text-muted-foreground">HR Document Request</p><h1 className="mt-0.5 truncate text-[18px] font-semibold">{item.documentLabel ?? item.documentType ?? "HR Document Request"}</h1><p className="mt-1 text-[14px] text-muted-foreground">Requested by {item.employee.fullName}</p></div><Badge status={item.status} /></div></header><div className="min-h-0 flex-1 overflow-y-auto p-6"><div className="max-w-2xl space-y-6"><section><p className="text-[13px] font-medium text-muted-foreground">Request details</p><p className="mt-1 text-[15px] leading-6">{item.reason}</p></section><dl className="grid gap-5 sm:grid-cols-2"><Detail label="Employee" value={item.employee.fullName} /><Detail label="Employee number" value={item.employee.employeeNumber} /><Detail label="Department" value={item.employee.department} /><Detail label="Submitted" value={formatDate(item.createdAt, true)} /><Detail label="Processing" value={item.assignedHrOfficer?.fullName ?? "Awaiting assignment"} /><Detail label="Conversation" value={item.session.isActive ? "Active" : "Inactive"} /></dl>{item.resolutionNote ? <section className="rounded-lg border border-border bg-card p-4"><p className="text-[13px] font-medium text-muted-foreground">Processing note</p><p className="mt-1 text-[14px] leading-6">{item.resolutionNote}</p></section> : null}</div></div></div>;
+  const { accessToken } = useAuth();
+  const { selectedId } = useOperationalQueue();
+  const [item, setItem] = useState<HrRequestRecord | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedId || !accessToken) {
+      setItem(null);
+      return;
+    }
+    setItem(null);
+    setFailed(false);
+    getHrRequest(selectedId, accessToken)
+      .then((data) => {
+        if (active) setItem(data);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [accessToken, selectedId]);
+
+  if (!selectedId) {
+    return (
+      <EmptyWorkspace
+        title="Select an HR request"
+        text="Choose a request from the queue to review the employee and requested document."
+      />
+    );
+  }
+  if (!item && !failed) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Loading HR request…
+      </div>
+    );
+  }
+  if (failed || !item) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Couldn’t load this HR request.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <header className="shrink-0 border-b border-border bg-card px-6 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[13px] text-muted-foreground">
+              HR Document Request
+            </p>
+            <h1 className="mt-0.5 truncate text-[18px] font-semibold">
+              {item.documentLabel ?? item.documentType ?? "HR Document Request"}
+            </h1>
+            <p className="mt-1 text-[14px] text-muted-foreground">
+              Requested by {item.employee.fullName}
+            </p>
+          </div>
+          <Badge status={item.status} />
+        </div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className="max-w-2xl space-y-6">
+          <section>
+            <p className="text-[13px] font-medium text-muted-foreground">
+              Request details
+            </p>
+            <p className="mt-1 text-[15px] leading-6">{item.reason}</p>
+          </section>
+          <dl className="grid gap-5 sm:grid-cols-2">
+            <Detail label="Employee" value={item.employee.fullName} />
+            <Detail
+              label="Employee number"
+              value={item.employee.employeeNumber}
+            />
+            <Detail label="Department" value={item.employee.department} />
+            <Detail
+              label="Submitted"
+              value={formatDate(item.createdAt, true)}
+            />
+            <Detail
+              label="Processing"
+              value={
+                item.assignedHrOfficer?.fullName ?? "Awaiting assignment"
+              }
+            />
+            <Detail
+              label="Conversation"
+              value={item.session.isActive ? "Active" : "Inactive"}
+            />
+          </dl>
+          {item.resolutionNote ? (
+            <section className="rounded-lg border border-border bg-card p-4">
+              <p className="text-[13px] font-medium text-muted-foreground">
+                Processing note
+              </p>
+              <p className="mt-1 text-[14px] leading-6">
+                {item.resolutionNote}
+              </p>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function Badge({ status }: { status: EscalationStatus }) { const labels = { OPEN: "Open", IN_PROGRESS: "In progress", RESOLVED: "Resolved", CLOSED: "Closed" }; return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", status === "OPEN" ? "bg-warning/10 text-warning" : status === "IN_PROGRESS" ? "bg-info/10 text-info" : "bg-muted text-muted-foreground")}>{labels[status]}</span>; }
-function Skeleton() { return <div className="space-y-3 py-4">{Array.from({ length: 6 }, (_, i) => <div key={i} className="space-y-2"><div className="h-4 w-3/5 animate-pulse rounded bg-muted" /><div className="h-3 w-4/5 animate-pulse rounded bg-muted" /></div>)}</div>; }
-function Empty({ title, text }: { title: string; text: string }) { return <div className="flex h-full flex-col items-center justify-center px-4 text-center"><p className="text-[15px] font-semibold">{title}</p><p className="mt-1 text-[14px] leading-5 text-muted-foreground">{text}</p></div>; }
-function EmptyWorkspace({ title, text }: { title: string; text: string }) { return <div className="flex h-full items-center justify-center p-6"><div className="max-w-sm text-center"><span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary"><ClipboardList className="size-5" /></span><h1 className="mt-4 text-lg font-semibold">{title}</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div></div>; }
-function Detail({ label, value }: { label: string; value: string }) { return <div><dt className="text-[13px] text-muted-foreground">{label}</dt><dd className="mt-1 text-[14px] font-medium">{value}</dd></div>; }
-function formatDate(value: string, includeTime = false) { return new Intl.DateTimeFormat(undefined, includeTime ? { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
+function Badge({ status }: { status: HrRequestStatus }) {
+  const labels: Record<HrRequestStatus, string> = {
+    OPEN: "Open",
+    IN_PROGRESS: "In progress",
+    RESOLVED: "Resolved",
+    CLOSED: "Closed",
+  };
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium",
+        status === "OPEN"
+          ? "bg-warning/10 text-warning"
+          : status === "IN_PROGRESS"
+          ? "bg-info/10 text-info"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      {labels[status]}
+    </span>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="space-y-3 py-4">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="space-y-2">
+          <div className="h-4 w-3/5 animate-pulse rounded bg-muted" />
+          <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Empty({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+      <p className="text-[15px] font-semibold">{title}</p>
+      <p className="mt-1 text-[14px] leading-5 text-muted-foreground">{text}</p>
+    </div>
+  );
+}
+
+function EmptyWorkspace({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="max-w-sm text-center">
+        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <ClipboardList className="size-5" />
+        </span>
+        <h1 className="mt-4 text-lg font-semibold">{title}</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-[14px] font-medium">{value}</dd>
+    </div>
+  );
+}
+
+function formatDate(value: string, includeTime = false) {
+  return new Intl.DateTimeFormat(
+    undefined,
+    includeTime
+      ? {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }
+      : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
+  ).format(new Date(value));
+}
