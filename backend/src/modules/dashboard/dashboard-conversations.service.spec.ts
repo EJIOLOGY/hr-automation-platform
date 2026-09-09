@@ -159,22 +159,22 @@ describe('DashboardConversationsService', () => {
 
     prisma.chatMessage.findMany.mockResolvedValue([
       {
-        id: 'message-5',
+        id: 'message-1',
         direction: 'INBOUND',
         messageType: 'TEXT',
-        content: '1',
+        content: '2',
         sentByHrOfficerId: null,
         sentByHrOfficer: null,
-        createdAt: new Date('2026-08-21T10:04:00.000Z'),
+        createdAt: new Date('2026-08-21T10:01:00.000Z'),
       },
       {
-        id: 'message-4',
+        id: 'message-2',
         direction: 'OUTBOUND',
         messageType: 'SYSTEM',
-        content: 'STATE_TRANSITION:MAIN_MENU->LEAVE_MENU',
+        content: 'STATE_TRANSITION:MAIN_MENU->POLICY_MENU',
         sentByHrOfficerId: null,
         sentByHrOfficer: null,
-        createdAt: new Date('2026-08-21T10:03:00.000Z'),
+        createdAt: new Date('2026-08-21T10:01:30.000Z'),
       },
       {
         id: 'message-3',
@@ -186,36 +186,38 @@ describe('DashboardConversationsService', () => {
         createdAt: new Date('2026-08-21T10:02:00.000Z'),
       },
       {
-        id: 'message-2',
+        id: 'message-4',
         direction: 'OUTBOUND',
         messageType: 'SYSTEM',
-        content: 'STATE_TRANSITION:POLICY_MENU->MAIN_MENU',
+        content: 'STATE_TRANSITION:POLICY_MENU->LEAVE_MENU',
         sentByHrOfficerId: null,
         sentByHrOfficer: null,
-        createdAt: new Date('2026-08-21T10:01:30.000Z'),
+        createdAt: new Date('2026-08-21T10:03:00.000Z'),
       },
       {
-        id: 'message-1',
+        id: 'message-5',
         direction: 'INBOUND',
         messageType: 'TEXT',
-        content: '2',
+        content: '1',
         sentByHrOfficerId: null,
         sentByHrOfficer: null,
-        createdAt: new Date('2026-08-21T10:01:00.000Z'),
+        createdAt: new Date('2026-08-21T10:04:00.000Z'),
       },
     ]);
 
     const result = await service.getMessages('session-1');
 
-    expect(result.items.find((item) => item.id === 'message-1')?.displayContent).toBe(
-      '[2] Leave & Time Off',
-    );
-    expect(result.items.find((item) => item.id === 'message-3')?.displayContent).toBe(
-      '[2] Working Hours & Attendance',
-    );
-    expect(result.items.find((item) => item.id === 'message-5')?.displayContent).toBe(
-      '[1] Check My Leave Balance',
-    );
+    expect(
+      result.items.find((item) => item.id === 'message-1')?.displayContent,
+    ).toBe('[2] Leave & Time Off');
+
+    expect(
+      result.items.find((item) => item.id === 'message-3')?.displayContent,
+    ).toBe('[2] Working Hours & Attendance');
+
+    expect(
+      result.items.find((item) => item.id === 'message-5')?.displayContent,
+    ).toBe('[1] Check My Leave Balance');
   });
 
   it('leaves an unresolved numeric employee selection unchanged', async () => {
