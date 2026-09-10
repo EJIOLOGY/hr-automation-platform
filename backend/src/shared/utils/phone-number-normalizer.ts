@@ -14,6 +14,12 @@ export class PhoneNumberNormalizer {
       return `+234${normalized.slice(1)}`;
     }
 
+    // WhatsApp Cloud API sends sender numbers as a bare MSISDN with no
+    // '+' prefix (e.g. "2348012345678"), as does the Graph API's `wa_id`.
+    if (/^234\d{10}$/.test(normalized)) {
+      return `+${normalized}`;
+    }
+
     throw new Error('Invalid Nigerian mobile phone number');
   }
 }
