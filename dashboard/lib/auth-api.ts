@@ -87,3 +87,74 @@ export async function logout(accessToken: string | null): Promise<void> {
     credentials: "include",
   });
 }
+
+export interface MessageResponse {
+  message: string;
+}
+
+export async function forgotPassword(email: string): Promise<MessageResponse> {
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    let message = "Unable to process password reset request.";
+    try {
+      const errorData = await response.json();
+      if (typeof errorData?.message === "string") {
+        message = errorData.message;
+      } else if (
+        Array.isArray(errorData?.message) &&
+        errorData.message.length > 0
+      ) {
+        message = errorData.message.join(", ");
+      }
+    } catch {
+      // Keep default message if response body is not JSON
+    }
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<MessageResponse>;
+}
+
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<MessageResponse> {
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ token, newPassword }),
+  });
+
+  if (!response.ok) {
+    let message =
+      "Unable to reset password. The link may be invalid or expired.";
+    try {
+      const errorData = await response.json();
+      if (typeof errorData?.message === "string") {
+        message = errorData.message;
+      } else if (
+        Array.isArray(errorData?.message) &&
+        errorData.message.length > 0
+      ) {
+        message = errorData.message.join(", ");
+      }
+    } catch {
+      // Keep default message if response body is not JSON
+    }
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<MessageResponse>;
+}
+

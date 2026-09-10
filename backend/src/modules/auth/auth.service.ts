@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -6,7 +7,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { MailerService } from '../../core/mailer/mailer.service';
 import { HrOfficerRole, HrOfficerStatus } from '../../generated/prisma/enums';
 import { AuditService } from '../audit/audit.service';
 import {
@@ -14,7 +17,9 @@ import {
   REFRESH_TOKEN_EXPIRES_IN,
 } from './auth.constants';
 import { CreateOfficerDto } from './dto/create-officer.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 interface AuthTokenPayload {
   sub: string;
@@ -29,6 +34,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
+    private readonly mailerService: MailerService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -256,6 +262,92 @@ export class AuthService {
     return secret;
   }
 
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const email = dto.email.trim().toLowerCase();
+
+    const officer = await this.prisma.hrOfficer.findUnique({
+      where: { email },
+    });
+
+    if (officer && officer.status === HrOfficerStatus.ACTIVE) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const passwordResetTokenHash = crypto
+        .createHash('sha256')
+        .update(rawToken)
+        .digest('hex');
+      const passwordResetTokenExpiresAt = new Date(
+        Date.now() + 60 * 60 * 1000,
+      );
+
+      await this.prisma.hrOfficer.update({
+        where: { id: officer.id },
+        data: {
+          passwordResetTokenHash,
+          passwordResetTokenExpiresAt,
+        },
+      });
+
+      const dashboardUrl =
+        this.configService.get<string>('DASHBOARD_URL') ??
+        this.configService.get<string>('DASHBOARD_ORIGIN') ??
+        'http://localhost:3001';
+      const cleanUrl = dashboardUrl.replace(/\/$/, '');
+      const resetUrl = `${cleanUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+
+      await this.mailerService.sendPasswordResetEmail(officer.email, resetUrl);
+    }
+
+    return {
+      message:
+        'If an active account exists with that email, a password reset link has been sent.',
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const passwordResetTokenHash = crypto
+      .createHash('sha256')
+      .update(dto.token)
+      .digest('hex');
+
+    const officer = await this.prisma.hrOfficer.findFirst({
+      where: {
+        passwordResetTokenHash,
+        passwordResetTokenExpiresAt: {
+          gt: new Date(),
+        },
+        status: HrOfficerStatus.ACTIVE,
+      },
+    });
+
+    if (!officer) {
+      throw new BadRequestException('Invalid or expired password reset token.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+
+    await this.prisma.hrOfficer.update({
+      where: { id: officer.id },
+      data: {
+        passwordHash,
+        passwordResetTokenHash: null,
+        passwordResetTokenExpiresAt: null,
+        refreshTokenHash: null,
+      },
+    });
+
+    await this.auditService.log({
+      actorType: 'HR_OFFICER',
+      actorHrOfficerId: officer.id,
+      action: 'AUTH_PASSWORD_RESET',
+      entityType: 'HR_OFFICER',
+      entityId: officer.id,
+    });
+
+    return {
+      message: 'Password has been reset successfully.',
+    };
+  }
+
   private publicOfficer(officer: {
     id: string;
     fullName: string;
@@ -272,3 +364,4 @@ export class AuthService {
     };
   }
 }
+

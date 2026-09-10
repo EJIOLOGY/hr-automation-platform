@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Eye, EyeOff, Loader2, LockKeyhole, Mail } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
@@ -110,12 +111,21 @@ export function LoginModal() {
 
             {/* Password */}
             <div>
-              <label
-                htmlFor="login-password"
-                className="mb-2 block text-[14px] font-medium text-slate-700"
-              >
-                Password
-              </label>
+              <div className="mb-2 flex items-center justify-between">
+                <label
+                  htmlFor="login-password"
+                  className="block text-[14px] font-medium text-slate-700"
+                >
+                  Password
+                </label>
+
+                <Link
+                  href="/forgot-password"
+                  className="text-[13px] font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
 
               <div className="relative">
                 <LockKeyhole

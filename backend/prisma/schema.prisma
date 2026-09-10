@@ -69,6 +69,8 @@ model HrOfficer {
   email        String          @unique
   passwordHash String
   refreshTokenHash String?
+  passwordResetTokenHash String?
+  passwordResetTokenExpiresAt DateTime?
   role         HrOfficerRole   @default(OFFICER)
   status       HrOfficerStatus @default(ACTIVE)
 
@@ -81,6 +83,7 @@ model HrOfficer {
 
   @@index([role])
   @@index([status])
+  @@index([passwordResetTokenHash])
 }
 
 model ChatSession {
