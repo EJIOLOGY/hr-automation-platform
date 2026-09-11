@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EscalationStatus } from '../../generated/prisma/enums';
 import { AuditService } from '../audit/audit.service';
+import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
 import { DashboardConversationsService } from './dashboard-conversations.service';
 
 describe('DashboardConversationsService', () => {
@@ -25,8 +26,14 @@ describe('DashboardConversationsService', () => {
     log: jest.fn(),
   };
 
+  const whatsappGraphClient = {
+    sendMessage: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
+
+    whatsappGraphClient.sendMessage.mockResolvedValue(true);
 
     prisma.$transaction.mockImplementation(async (callback: any) =>
       callback({
@@ -45,6 +52,10 @@ describe('DashboardConversationsService', () => {
         {
           provide: AuditService,
           useValue: auditService,
+        },
+        {
+          provide: WhatsappGraphClient,
+          useValue: whatsappGraphClient,
         },
       ],
     }).compile();
@@ -242,10 +253,13 @@ describe('DashboardConversationsService', () => {
     expect(result.items[0].displayContent).toBe('99');
   });
 
-  it('sends an HR reply for the officer assigned to the active escalation', async () => {
+  it('sends an HR reply through WhatsApp for the officer assigned to the active escalation', async () => {
     prisma.chatSession.findUnique.mockResolvedValue({
       id: 'session-1',
       isActive: true,
+      employee: {
+        phoneNumber: '08000000000',
+      },
       escalations: [
         {
           id: 'escalation-1',
@@ -278,6 +292,14 @@ describe('DashboardConversationsService', () => {
       'session-1',
       'officer-1',
       '  Your request has been received.  ',
+    );
+
+    expect(whatsappGraphClient.sendMessage).toHaveBeenCalledWith(
+      '2348000000000',
+      {
+        type: 'text',
+        text: 'Your request has been received.',
+      },
     );
 
     expect(result).toMatchObject({
@@ -325,6 +347,43 @@ describe('DashboardConversationsService', () => {
     );
   });
 
+  it('does not persist an HR reply when WhatsApp delivery fails', async () => {
+    prisma.chatSession.findUnique.mockResolvedValue({
+      id: 'session-1',
+      isActive: true,
+      employee: {
+        phoneNumber: '08000000000',
+      },
+      escalations: [
+        {
+          id: 'escalation-1',
+          assignedHrOfficerId: 'officer-1',
+          status: EscalationStatus.IN_PROGRESS,
+        },
+      ],
+    });
+
+    whatsappGraphClient.sendMessage.mockResolvedValue(false);
+
+    await expect(
+      service.replyToConversation('session-1', 'officer-1', 'Hello'),
+    ).rejects.toThrow(
+      'Unable to send the message to the employee on WhatsApp. Please try again.',
+    );
+
+    expect(whatsappGraphClient.sendMessage).toHaveBeenCalledWith(
+      '2348000000000',
+      {
+        type: 'text',
+        text: 'Hello',
+      },
+    );
+
+    expect(prisma.chatMessage.create).not.toHaveBeenCalled();
+    expect(prisma.chatSession.update).not.toHaveBeenCalled();
+    expect(auditService.log).not.toHaveBeenCalled();
+  });
+
   it('rejects an HR reply when the conversation has no active assigned escalation', async () => {
     prisma.chatSession.findUnique.mockResolvedValue({
       id: 'session-1',
@@ -337,6 +396,8 @@ describe('DashboardConversationsService', () => {
     ).rejects.toThrow(
       'This conversation is not currently assigned to an HR officer.',
     );
+
+    expect(whatsappGraphClient.sendMessage).not.toHaveBeenCalled();
   });
 
   it('rejects an HR reply from an officer who is not assigned to the conversation', async () => {
@@ -355,6 +416,8 @@ describe('DashboardConversationsService', () => {
     await expect(
       service.replyToConversation('session-1', 'officer-1', 'Hello'),
     ).rejects.toThrow('This conversation is assigned to another HR officer.');
+
+    expect(whatsappGraphClient.sendMessage).not.toHaveBeenCalled();
   });
 
   it('rejects an empty HR reply', async () => {
@@ -363,6 +426,16 @@ describe('DashboardConversationsService', () => {
     ).rejects.toThrow('Message content cannot be empty.');
 
     expect(prisma.chatSession.findUnique).not.toHaveBeenCalled();
+    expect(whatsappGraphClient.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects an HR reply longer than 2000 characters', async () => {
+    await expect(
+      service.replyToConversation('session-1', 'officer-1', 'a'.repeat(2001)),
+    ).rejects.toThrow('Message content must not exceed 2000 characters.');
+
+    expect(prisma.chatSession.findUnique).not.toHaveBeenCalled();
+    expect(whatsappGraphClient.sendMessage).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown conversation when replying', async () => {
@@ -371,6 +444,8 @@ describe('DashboardConversationsService', () => {
     await expect(
       service.replyToConversation('missing-session', 'officer-1', 'Hello'),
     ).rejects.toThrow('Conversation not found.');
+
+    expect(whatsappGraphClient.sendMessage).not.toHaveBeenCalled();
   });
 
   it('marks a conversation as read and audits the action', async () => {

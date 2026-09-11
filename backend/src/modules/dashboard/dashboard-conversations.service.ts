@@ -9,6 +9,8 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EscalationStatus } from '../../generated/prisma/enums';
 import { MENU_CONFIG, MENU_IDS } from '../chat/menu.config';
+import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
+import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 
 interface ConversationCursor {
   lastActivityAt: string;
@@ -25,6 +27,7 @@ export class DashboardConversationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly whatsappGraphClient: WhatsappGraphClient,
   ) {}
 
   private encodeCursor(cursor: ConversationCursor | MessageCursor): string {
@@ -288,13 +291,11 @@ export class DashboardConversationsService {
 
     const displayContentByMessageId = this.buildDisplayContentMap(allMessages);
 
-    const items = pageItems
-      .reverse()
-      .map((message) => ({
-        ...message,
-        displayContent:
-          displayContentByMessageId.get(message.id) ?? message.content,
-      }));
+    const items = pageItems.reverse().map((message) => ({
+      ...message,
+      displayContent:
+        displayContentByMessageId.get(message.id) ?? message.content,
+    }));
 
     return {
       items,
@@ -423,6 +424,11 @@ export class DashboardConversationsService {
       select: {
         id: true,
         isActive: true,
+        employee: {
+          select: {
+            phoneNumber: true,
+          },
+        },
         escalations: {
           where: {
             status: EscalationStatus.IN_PROGRESS,
@@ -460,6 +466,24 @@ export class DashboardConversationsService {
     if (activeEscalation.assignedHrOfficerId !== hrOfficerId) {
       throw new ForbiddenException(
         'This conversation is assigned to another HR officer.',
+      );
+    }
+
+    const recipientPhoneNumber = PhoneNumberNormalizer.normalize(
+      session.employee.phoneNumber,
+    ).replace(/^\+/, '');
+
+    const sent = await this.whatsappGraphClient.sendMessage(
+      recipientPhoneNumber,
+      {
+        type: 'text',
+        text: trimmedContent,
+      },
+    );
+
+    if (!sent) {
+      throw new BadRequestException(
+        'Unable to send the message to the employee on WhatsApp. Please try again.',
       );
     }
 

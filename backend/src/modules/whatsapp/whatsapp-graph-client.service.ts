@@ -17,7 +17,7 @@ export class WhatsappGraphClient {
   async sendMessage(
     to: string,
     message: WhatsappOutboundMessage,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const accessToken = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
     const phoneNumberId = this.configService.get<string>(
       'WHATSAPP_PHONE_NUMBER_ID',
@@ -29,7 +29,7 @@ export class WhatsappGraphClient {
       this.logger.error(
         'Cannot send WhatsApp message: WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID is not configured.',
       );
-      return;
+      return false;
     }
 
     const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
@@ -44,6 +44,8 @@ export class WhatsappGraphClient {
           },
         }),
       );
+
+      return true;
     } catch (error) {
       const details =
         error instanceof AxiosError
@@ -51,6 +53,8 @@ export class WhatsappGraphClient {
           : String(error);
 
       this.logger.error(`Failed to send WhatsApp message to ${to}: ${details}`);
+
+      return false;
     }
   }
 

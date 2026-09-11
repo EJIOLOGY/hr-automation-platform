@@ -4,6 +4,7 @@ import { PrismaModule } from '../../core/prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../audit/audit.module';
 import { EscalationModule } from '../escalation/escalation.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { DashboardConversationsController } from './dashboard-conversations.controller';
@@ -15,7 +16,13 @@ import { DashboardHrRequestsService } from './dashboard-hr-requests.service';
 import { DashboardAuditLogsController } from './dashboard-audit-logs.controller';
 
 @Module({
-  imports: [PrismaModule, AuthModule, AuditModule, EscalationModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    AuditModule,
+    EscalationModule,
+    WhatsappModule,
+  ],
   controllers: [
     DashboardController,
     DashboardConversationsController,

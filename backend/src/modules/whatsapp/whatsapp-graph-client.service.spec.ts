@@ -1,5 +1,6 @@
-import { of, throwError } from 'rxjs';
 import { AxiosError } from 'axios';
+import { of, throwError } from 'rxjs';
+
 import { WhatsappGraphClient } from './whatsapp-graph-client.service';
 
 describe('WhatsappGraphClient', () => {
@@ -7,23 +8,26 @@ describe('WhatsappGraphClient', () => {
     get: jest.fn((key: string) => values[key]),
   });
 
-  it('does nothing and logs when credentials are not configured', async () => {
+  it('returns false and does nothing when credentials are not configured', async () => {
     const post = jest.fn();
+
     const client = new WhatsappGraphClient(
       { post } as any,
       buildConfig({}) as any,
     );
 
-    await client.sendMessage('2348000000000', {
+    const result = await client.sendMessage('2348000000000', {
       type: 'text',
       text: 'Hello',
     });
 
+    expect(result).toBe(false);
     expect(post).not.toHaveBeenCalled();
   });
 
   it('sends a text message with the correct Graph API payload and auth header', async () => {
     const post = jest.fn().mockReturnValue(of({ data: {} }));
+
     const client = new WhatsappGraphClient(
       { post } as any,
       buildConfig({
@@ -32,10 +36,12 @@ describe('WhatsappGraphClient', () => {
       }) as any,
     );
 
-    await client.sendMessage('2348000000000', {
+    const result = await client.sendMessage('2348000000000', {
       type: 'text',
       text: 'Hello there',
     });
+
+    expect(result).toBe(true);
 
     expect(post).toHaveBeenCalledWith(
       'https://graph.facebook.com/v21.0/PHONE_ID/messages',
@@ -56,6 +62,7 @@ describe('WhatsappGraphClient', () => {
 
   it('sends a list menu reply as a Graph API interactive list message', async () => {
     const post = jest.fn().mockReturnValue(of({ data: {} }));
+
     const client = new WhatsappGraphClient(
       { post } as any,
       buildConfig({
@@ -64,7 +71,7 @@ describe('WhatsappGraphClient', () => {
       }) as any,
     );
 
-    await client.sendMessage('2348000000000', {
+    const result = await client.sendMessage('2348000000000', {
       type: 'menu',
       menuId: 'main-menu',
       title: 'HR Menu',
@@ -72,6 +79,8 @@ describe('WhatsappGraphClient', () => {
       presentation: 'list',
       options: [{ id: 'leave', label: 'Leave Balance' }],
     });
+
+    expect(result).toBe(true);
 
     const [, body] = post.mock.calls[0] as [string, Record<string, unknown>];
 
@@ -108,6 +117,7 @@ describe('WhatsappGraphClient', () => {
 
   it('sends a text menu reply as a plain WhatsApp text message', async () => {
     const post = jest.fn().mockReturnValue(of({ data: {} }));
+
     const client = new WhatsappGraphClient(
       { post } as any,
       buildConfig({
@@ -116,7 +126,7 @@ describe('WhatsappGraphClient', () => {
       }) as any,
     );
 
-    await client.sendMessage('2348000000000', {
+    const result = await client.sendMessage('2348000000000', {
       type: 'menu',
       menuId: 'leave-menu',
       title: 'Leave & Time Off',
@@ -133,6 +143,8 @@ describe('WhatsappGraphClient', () => {
         },
       ],
     });
+
+    expect(result).toBe(true);
 
     const [, body] = post.mock.calls[0] as [string, Record<string, unknown>];
 
@@ -151,6 +163,7 @@ describe('WhatsappGraphClient', () => {
 
   it('sends multiple messages to the same recipient sequentially', async () => {
     const calls: string[] = [];
+
     const post = jest.fn((_url: string, body: { type: string }) => {
       calls.push(body.type);
       return of({ data: {} });
@@ -173,7 +186,7 @@ describe('WhatsappGraphClient', () => {
     expect(calls).toEqual(['text', 'text']);
   });
 
-  it('swallows and logs errors from the Graph API instead of throwing', async () => {
+  it('returns false when the Graph API request fails', async () => {
     const axiosError = new AxiosError('Request failed');
 
     axiosError.response = {
@@ -195,6 +208,6 @@ describe('WhatsappGraphClient', () => {
         type: 'text',
         text: 'Hello',
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
   });
 });
