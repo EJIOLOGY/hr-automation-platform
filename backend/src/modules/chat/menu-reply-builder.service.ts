@@ -83,12 +83,11 @@ export class MenuReplyBuilderService {
 
   private getMainMenuLabel(id: string, label: string): string {
     const icons: Record<string, string> = {
-      policy_faq: '▱',
-      leave_balance: '◷',
-      benefits: '✦',
-      hr_document_requests: '▤',
+      policy_faq: '💬',
+      leave_balance: '📅',
+      benefits: '🎁',
+      hr_document_requests: '📄',
     };
-
     const icon = icons[id];
 
     return icon ? `${icon}  ${label}` : label;

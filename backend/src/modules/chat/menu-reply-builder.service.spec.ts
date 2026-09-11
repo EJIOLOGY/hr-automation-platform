@@ -69,10 +69,10 @@ describe('MenuReplyBuilderService', () => {
     expect(mainMenu?.presentation).toBe('list');
 
     expect(mainMenu?.options.map((option) => option.label)).toEqual([
-      '▱  I Have a Question',
-      '◷  Leave & Time Off',
-      '✦  Benefits',
-      '▤  HR Document Requests',
+      '💬  I Have a Question',
+      '📅  Leave & Time Off',
+      '🎁  Benefits',
+      '📄  HR Document Requests',
     ]);
   });
 
