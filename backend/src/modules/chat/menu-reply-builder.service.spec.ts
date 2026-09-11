@@ -63,15 +63,26 @@ describe('MenuReplyBuilderService', () => {
     }
   });
 
-  it('renders numbered options without emojis', () => {
+  it('renders clean professional symbols for the native main menu', () => {
     const mainMenu = service.buildMenuReply(MENU_IDS.MAIN);
 
+    expect(mainMenu?.presentation).toBe('list');
+
     expect(mainMenu?.options.map((option) => option.label)).toEqual([
-      '[1] I Have a Question',
-      '[2] Leave & Time Off',
-      '[3] Benefits',
-      '[4] HR Document Requests',
+      '▱  I Have a Question',
+      '◷  Leave & Time Off',
+      '✦  Benefits',
+      '▤  HR Document Requests',
     ]);
+  });
+
+  it('renders numbered options for text submenus', () => {
+    const questionMenu = service.buildMenuReply(MENU_IDS.POLICY);
+
+    expect(questionMenu?.presentation).toBe('text');
+
+    expect(questionMenu?.options[0].label).toMatch(/^\[1\] /);
+    expect(questionMenu?.options[1].label).toMatch(/^\[2\] /);
   });
 
   it('resolves a numeric selection to the option in the current menu', () => {
@@ -102,6 +113,7 @@ describe('MenuReplyBuilderService', () => {
       service.getSelection(MENU_IDS.MAIN, 'unrecognized_selection'),
     ).toBeUndefined();
   });
+
   it('provides the locked HR Document Requests flow', () => {
     expect(service.getSelection(MENU_IDS.VERIFICATION, '1')).toEqual({
       id: MENU_SELECTION_IDS.REQUEST_HR_DOCUMENT,

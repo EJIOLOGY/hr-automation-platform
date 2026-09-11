@@ -40,7 +40,10 @@ export class MenuReplyBuilderService {
       presentation: menu.presentation,
       options: menu.options.map(({ id, label }, index) => ({
         id,
-        label: `[${index + 1}] ${label}`,
+        label:
+          menu.presentation === 'list'
+            ? this.getMainMenuLabel(id, label)
+            : `[${index + 1}] ${label}`,
       })),
     };
   }
@@ -76,6 +79,19 @@ export class MenuReplyBuilderService {
     );
 
     return option ? this.toSelection(option) : undefined;
+  }
+
+  private getMainMenuLabel(id: string, label: string): string {
+    const icons: Record<string, string> = {
+      policy_faq: '▱',
+      leave_balance: '◷',
+      benefits: '✦',
+      hr_document_requests: '▤',
+    };
+
+    const icon = icons[id];
+
+    return icon ? `${icon}  ${label}` : label;
   }
 
   private findMenu(menuId: string): MenuDefinition | undefined {
