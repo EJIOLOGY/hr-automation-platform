@@ -26,6 +26,7 @@ export interface MenuConversationReply {
   menuId: string;
   title: string;
   prompt: string;
+  presentation: 'list' | 'text';
   options: readonly {
     id: string;
     label: string;

@@ -7,6 +7,7 @@ export interface MenuReply {
   menuId: string;
   title: string;
   prompt: string;
+  presentation: 'list' | 'text';
   options: readonly {
     id: string;
     label: string;
@@ -20,7 +21,7 @@ export interface MenuSelection {
 
 /**
  * Converts static menu configuration into a transport-neutral reply model.
- * A future WhatsApp adapter can map this model to List or Reply Button payloads.
+ * A future WhatsApp adapter can map this model to List or plain text.
  */
 @Injectable()
 export class MenuReplyBuilderService {
@@ -36,6 +37,7 @@ export class MenuReplyBuilderService {
       menuId: menu.id,
       title: menu.title,
       prompt: menu.prompt,
+      presentation: menu.presentation,
       options: menu.options.map(({ id, label }, index) => ({
         id,
         label: `[${index + 1}] ${label}`,

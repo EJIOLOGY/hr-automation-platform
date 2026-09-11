@@ -63,6 +63,8 @@ export type MenuAction =
   | 'request_document'
   | 'back';
 
+export type MenuPresentation = 'list' | 'text';
+
 export interface MenuOption {
   id: string;
   label: string;
@@ -73,6 +75,7 @@ export interface MenuDefinition {
   id: string;
   title: string;
   prompt: string;
+  presentation: MenuPresentation;
   options: readonly MenuOption[];
 }
 
@@ -90,6 +93,7 @@ export const MENU_CONFIG: readonly MenuDefinition[] = [
     id: MENU_IDS.MAIN,
     title: 'HR Services',
     prompt: 'How may we be of service?',
+    presentation: 'list',
     options: [
       {
         id: MENU_SELECTION_IDS.POLICY_FAQ,
@@ -117,6 +121,7 @@ export const MENU_CONFIG: readonly MenuDefinition[] = [
     id: MENU_IDS.POLICY,
     title: '❓ I Have a Question',
     prompt: 'What would you like to know about?',
+    presentation: 'text',
     options: [
       {
         id: MENU_SELECTION_IDS.LEAVE_POLICY,
@@ -165,6 +170,7 @@ export const MENU_CONFIG: readonly MenuDefinition[] = [
     id: MENU_IDS.LEAVE,
     title: 'Leave & Time Off',
     prompt: 'How can we assist you with your leave?',
+    presentation: 'text',
     options: [
       {
         id: MENU_SELECTION_IDS.LEAVE_BALANCE,
@@ -198,6 +204,7 @@ export const MENU_CONFIG: readonly MenuDefinition[] = [
     id: MENU_IDS.BENEFITS,
     title: 'Benefits',
     prompt: 'What would you like to know about your benefits?',
+    presentation: 'text',
     options: [
       {
         id: MENU_SELECTION_IDS.MEDICAL_BENEFITS,
@@ -231,6 +238,7 @@ export const MENU_CONFIG: readonly MenuDefinition[] = [
     id: MENU_IDS.VERIFICATION,
     title: 'HR Document Requests',
     prompt: 'What would you like to do?',
+    presentation: 'text',
     options: [
       {
         id: MENU_SELECTION_IDS.REQUEST_HR_DOCUMENT,
@@ -249,6 +257,7 @@ export const MENU_CONFIG: readonly MenuDefinition[] = [
     id: MENU_IDS.DOCUMENT_REQUEST,
     title: 'Request an HR Document',
     prompt: 'What document do you need?',
+    presentation: 'text',
     options: [
       {
         id: MENU_SELECTION_IDS.EMPLOYMENT_VERIFICATION_LETTER,

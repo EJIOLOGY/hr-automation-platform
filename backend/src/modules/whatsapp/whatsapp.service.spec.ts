@@ -68,7 +68,7 @@ describe('WhatsappService', () => {
     });
   });
 
-  it('maps a list inbound message as a selection input', async () => {
+  it('maps a Meta interactive list reply as a selection input', async () => {
     conversationService.handleMessage.mockResolvedValue({
       success: true,
       replies: [{ type: 'text', text: 'Selected' }],
@@ -76,8 +76,13 @@ describe('WhatsappService', () => {
 
     await service.handleInbound({
       from: '07044965784',
-      type: 'list',
-      list: { id: 'policy_faq' },
+      type: 'interactive',
+      interactive: {
+        type: 'list_reply',
+        list_reply: {
+          id: 'policy_faq',
+        },
+      },
       id: 'wamid.list-001',
     });
 

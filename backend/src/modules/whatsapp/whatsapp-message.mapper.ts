@@ -22,8 +22,13 @@ export type WhatsappInboundMessage =
     }
   | {
       from: string;
-      type: 'list';
-      list: { id: string };
+      type: 'interactive';
+      interactive: {
+        type: 'list_reply';
+        list_reply: {
+          id: string;
+        };
+      };
       id?: string;
       timestamp?: Date;
     };
@@ -38,6 +43,7 @@ export type WhatsappOutboundMessage =
       menuId: string;
       title: string;
       prompt: string;
+      presentation: 'list' | 'text';
       options: readonly { id: string; label: string }[];
     };
 
@@ -66,7 +72,9 @@ export class WhatsappMessageMapper {
       input: {
         kind: 'selection',
         value:
-          message.type === 'button' ? message.button.payload : message.list.id,
+          message.type === 'button'
+            ? message.button.payload
+            : message.interactive.list_reply.id,
       },
     };
   }
@@ -81,6 +89,7 @@ export class WhatsappMessageMapper {
       menuId: reply.menuId,
       title: reply.title,
       prompt: reply.prompt,
+      presentation: reply.presentation,
       options: reply.options,
     };
   }

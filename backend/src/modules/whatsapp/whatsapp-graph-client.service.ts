@@ -5,12 +5,6 @@ import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import type { WhatsappOutboundMessage } from './whatsapp-message.mapper';
 
-/**
- * Thin client around Meta's WhatsApp Cloud API `/messages` endpoint.
- * Responsible only for translating a transport-neutral outbound message
- * into the wire format Meta expects, and delivering it. Contains no
- * conversation/state-machine logic.
- */
 @Injectable()
 export class WhatsappGraphClient {
   private readonly logger = new Logger(WhatsappGraphClient.name);
@@ -81,14 +75,32 @@ export class WhatsappGraphClient {
       };
     }
 
+    if (message.presentation === 'text') {
+      return {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: {
+          body: `${message.title}\n\n${message.prompt}\n\n${message.options
+            .map((option) => option.label)
+            .join('\n')}`,
+        },
+      };
+    }
+
     return {
       messaging_product: 'whatsapp',
       to,
       type: 'interactive',
       interactive: {
         type: 'list',
-        header: { type: 'text', text: message.title },
-        body: { text: message.prompt },
+        header: {
+          type: 'text',
+          text: message.title,
+        },
+        body: {
+          text: message.prompt,
+        },
         action: {
           button: 'Select',
           sections: [
