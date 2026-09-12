@@ -6,6 +6,7 @@ import { AlertTriangle, MessageSquare, RefreshCw, Search } from "lucide-react";
 import { getConversations, type Conversation } from "@/lib/dashboard-api";
 import { ApiError } from "@/lib/auth-api";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useRealtime } from "./realtime-provider";
 import { cn } from "@/lib/utils";
 import { useConversationSelection } from "./conversation-context";
 
@@ -147,8 +148,20 @@ export function ConversationList() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ConversationFilter>("all");
 
+  const [refreshSignal, setRefreshSignal] = useState(0);
   const { accessToken, refreshAuth } = useAuth();
   const { selectConversation } = useConversationSelection();
+  const { on } = useRealtime();
+
+  // The gateway sends a lightweight signal (no message body) whenever any
+  // conversation changes. React to it with a silent background refetch —
+  // this must NOT reuse retryCount, since that path clears the list to
+  // show a loading skeleton, which would flash on every single message.
+  useEffect(() => {
+    return on("conversation:list-updated", () => {
+      setRefreshSignal((count) => count + 1);
+    });
+  }, [on]);
 
   useEffect(() => {
     let active = true;
@@ -201,6 +214,48 @@ export function ConversationList() {
       active = false;
     };
   }, [accessToken, refreshAuth, retryCount]);
+
+  // Silent refresh: same data source as above, but never clears the list
+  // first — the realtime signal fires often (any message, any employee),
+  // so this must feel like a quiet update, not a reload.
+  useEffect(() => {
+    if (refreshSignal === 0) {
+      return;
+    }
+
+    let active = true;
+
+    async function silentlyRefresh() {
+      if (!accessToken) return;
+
+      try {
+        const response = await getConversations(accessToken);
+        if (active) setConversations(response.items);
+      } catch (err) {
+        if (!active || !(err instanceof ApiError) || err.status !== 401) {
+          return;
+        }
+
+        try {
+          const newToken = await refreshAuth();
+          if (!active || !newToken) return;
+
+          const response = await getConversations(newToken);
+          if (active) setConversations(response.items);
+        } catch {
+          // Silent refresh failures are non-critical — the next realtime
+          // signal or manual refresh will retry. No error state shown.
+        }
+      }
+    }
+
+    void silentlyRefresh();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   useEffect(() => {
     if (!conversationId || !conversations) {

@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EscalationStatus } from '../../generated/prisma/enums';
 import { AuditService } from '../audit/audit.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
 import { DashboardConversationsService } from './dashboard-conversations.service';
 
@@ -28,6 +29,10 @@ describe('DashboardConversationsService', () => {
 
   const whatsappGraphClient = {
     sendMessage: jest.fn(),
+  };
+
+  const realtimeGateway = {
+    notifyNewMessage: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -56,6 +61,10 @@ describe('DashboardConversationsService', () => {
         {
           provide: WhatsappGraphClient,
           useValue: whatsappGraphClient,
+        },
+        {
+          provide: RealtimeGateway,
+          useValue: realtimeGateway,
         },
       ],
     }).compile();

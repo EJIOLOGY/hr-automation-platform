@@ -19,6 +19,7 @@ import {
 import { ApiError } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import { useConversationSelection } from "./conversation-context";
+import { useRealtime } from "./realtime-provider";
 
 export function ConversationWorkspace() {
   const { selectedConversation } = useConversationSelection();
@@ -31,6 +32,32 @@ export function ConversationWorkspace() {
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [refreshSignal, setRefreshSignal] = useState(0);
+
+  const { joinConversation, leaveConversation, on } = useRealtime();
+  const selectedConversationId = selectedConversation?.id ?? null;
+
+  // Join the room for the open conversation so the gateway only pushes
+  // signals for the thread actually being viewed; leave it on switch/unmount.
+  useEffect(() => {
+    if (!selectedConversationId) return;
+
+    joinConversation(selectedConversationId);
+
+    return () => {
+      leaveConversation(selectedConversationId);
+    };
+  }, [selectedConversationId, joinConversation, leaveConversation]);
+
+  useEffect(() => {
+    return on("conversation:new-message", (...args: unknown[]) => {
+      const payload = args[0] as { sessionId?: string } | undefined;
+
+      if (payload?.sessionId && payload.sessionId === selectedConversationId) {
+        setRefreshSignal((count) => count + 1);
+      }
+    });
+  }, [on, selectedConversationId]);
 
   useEffect(() => {
     let active = true;
@@ -105,6 +132,59 @@ export function ConversationWorkspace() {
       active = false;
     };
   }, [accessToken, refreshAuth, retryCount, selectedConversation]);
+
+  // Silent refresh: a new message arrived for the open conversation. Fetch
+  // quietly and append/replace without flashing the loading skeleton —
+  // that would interrupt someone actively reading or typing a reply.
+  useEffect(() => {
+    if (refreshSignal === 0 || !selectedConversation || !accessToken) {
+      return;
+    }
+
+    let active = true;
+
+    async function silentlyRefresh() {
+      if (!selectedConversation || !accessToken) return;
+
+      try {
+        const response = await getConversationMessages(
+          selectedConversation.id,
+          accessToken,
+        );
+
+        if (active) setMessages(response.items);
+
+        void markConversationRead(selectedConversation.id, accessToken);
+      } catch (err) {
+        if (!active || !(err instanceof ApiError) || err.status !== 401) {
+          return;
+        }
+
+        try {
+          const newToken = await refreshAuth();
+          if (!active || !newToken || !selectedConversation) return;
+
+          const response = await getConversationMessages(
+            selectedConversation.id,
+            newToken,
+          );
+
+          if (active) setMessages(response.items);
+
+          void markConversationRead(selectedConversation.id, newToken);
+        } catch {
+          // Non-critical — the next signal or a manual retry will recover.
+        }
+      }
+    }
+
+    void silentlyRefresh();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   const canReply = Boolean(
     selectedConversation?.activeEscalation?.status === "IN_PROGRESS" &&

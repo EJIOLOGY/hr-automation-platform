@@ -4,6 +4,7 @@ import { PrismaModule } from '../../core/prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../audit/audit.module';
 import { EscalationModule } from '../escalation/escalation.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
@@ -22,6 +23,7 @@ import { DashboardAuditLogsController } from './dashboard-audit-logs.controller'
     AuditModule,
     EscalationModule,
     WhatsappModule,
+    RealtimeModule,
   ],
   controllers: [
     DashboardController,

@@ -9,6 +9,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EscalationStatus } from '../../generated/prisma/enums';
 import { MENU_CONFIG, MENU_IDS } from '../chat/menu.config';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
 import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 
@@ -28,6 +29,7 @@ export class DashboardConversationsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly whatsappGraphClient: WhatsappGraphClient,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   private encodeCursor(cursor: ConversationCursor | MessageCursor): string {
@@ -532,6 +534,8 @@ export class DashboardConversationsService {
         escalationId: activeEscalation.id,
       },
     });
+
+    this.realtimeGateway.notifyNewMessage(sessionId, 'OUTBOUND');
 
     return message;
   }

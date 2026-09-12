@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CONVERSATION_PORT } from '../chat/conversation.contracts';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WhatsappMessageMapper } from './whatsapp-message.mapper';
 import { WhatsappService } from './whatsapp.service';
 
@@ -8,10 +9,17 @@ describe('WhatsappService', () => {
   let conversationService: {
     handleMessage: jest.Mock;
   };
+  let realtimeGateway: {
+    notifyNewMessage: jest.Mock;
+  };
 
   beforeEach(async () => {
     conversationService = {
       handleMessage: jest.fn(),
+    };
+
+    realtimeGateway = {
+      notifyNewMessage: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -19,6 +27,7 @@ describe('WhatsappService', () => {
         WhatsappService,
         WhatsappMessageMapper,
         { provide: CONVERSATION_PORT, useValue: conversationService },
+        { provide: RealtimeGateway, useValue: realtimeGateway },
       ],
     }).compile();
 
