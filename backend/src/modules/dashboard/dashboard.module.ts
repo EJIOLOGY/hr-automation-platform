@@ -6,6 +6,8 @@ import { AuditModule } from '../audit/audit.module';
 import { EscalationModule } from '../escalation/escalation.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { HrDocumentRequestService } from '../verification/hr-document-request.service';
+
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { DashboardConversationsController } from './dashboard-conversations.controller';
@@ -37,6 +39,7 @@ import { DashboardAuditLogsController } from './dashboard-audit-logs.controller'
     DashboardConversationsService,
     DashboardEscalationsService,
     DashboardHrRequestsService,
+    HrDocumentRequestService,
   ],
   exports: [
     DashboardService,

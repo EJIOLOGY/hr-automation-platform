@@ -4,12 +4,18 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { AxiosError } from 'axios';
+import { firstValueFrom } from 'rxjs';
+
 import { PrismaService } from '../../core/prisma/prisma.service';
 import {
   EscalationStatus,
   MessageDirection,
   MessageType,
 } from '../../generated/prisma/enums';
+import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 
 export const QUEUE_ENGAGEMENT_PREFIX = 'HR_QUEUE_ENGAGEMENT:';
 
@@ -23,7 +29,11 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(HrQueueEngagementService.name);
   private intervalHandle: ReturnType<typeof setInterval> | undefined;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+  ) {}
 
   onModuleInit(): void {
     this.intervalHandle = setInterval(() => {
@@ -54,9 +64,8 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
    * Only OPEN escalations are processed. Once HR starts handling the
    * ticket (IN_PROGRESS), engagement messages stop automatically.
    *
-   * The message is persisted as an outbound ChatMessage. The WhatsApp
-   * channel adapter will be responsible for delivering outbound messages
-   * when the channel integration is connected.
+   * The employee-facing message keeps the existing approved wording.
+   * The queue position is calculated dynamically from the current queue.
    */
   async processWaitingEscalations(now = new Date()): Promise<number> {
     const waitingEscalations = await this.prisma.escalation.findMany({
@@ -67,12 +76,18 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
         employee: {
           select: {
             fullName: true,
+            phoneNumber: true,
           },
         },
       },
-      orderBy: {
-        createdAt: 'asc',
-      },
+      orderBy: [
+        {
+          createdAt: 'asc',
+        },
+        {
+          id: 'asc',
+        },
+      ],
     });
 
     let processedCount = 0;
@@ -91,6 +106,7 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
       const engagementCount = await this.getEngagementCount(
         escalation.sessionId,
       );
+
       const queuePosition = await this.getQueuePosition(
         escalation.id,
         escalation.createdAt,
@@ -101,6 +117,19 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
         queuePosition,
         engagementCount,
       );
+
+      const sent = await this.sendWhatsAppMessage(
+        escalation.employee.phoneNumber,
+        message,
+      );
+
+      if (!sent) {
+        this.logger.warn(
+          `Queue engagement message was not delivered for escalation ${escalation.id}.`,
+        );
+
+        continue;
+      }
 
       await this.prisma.chatMessage.create({
         data: {
@@ -145,6 +174,7 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
     }
 
     const engagementCount = await this.getEngagementCount(sessionId);
+
     const delay =
       engagementCount === 1
         ? SECOND_MESSAGE_DELAY_MS
@@ -165,6 +195,12 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * Calculates the employee's current queue position.
+   *
+   * Only OPEN escalations ahead of the current request count.
+   * The ordering is deterministic by createdAt + id.
+   */
   private async getQueuePosition(
     escalationId: string,
     escalationCreatedAt: Date,
@@ -172,18 +208,30 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
     const requestsAhead = await this.prisma.escalation.count({
       where: {
         status: EscalationStatus.OPEN,
-        createdAt: {
-          lt: escalationCreatedAt,
-        },
-        id: {
-          not: escalationId,
-        },
+        OR: [
+          {
+            createdAt: {
+              lt: escalationCreatedAt,
+            },
+          },
+          {
+            createdAt: escalationCreatedAt,
+            id: {
+              lt: escalationId,
+            },
+          },
+        ],
       },
     });
 
     return requestsAhead + 1;
   }
 
+  /**
+   * This preserves the employee-facing message pattern already approved.
+   *
+   * Only the queue position is dynamic.
+   */
   private buildEngagementMessage(
     fullName: string,
     queuePosition: number,
@@ -200,5 +248,76 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
     }
 
     return `Hi ${firstName}, your HR request is still active in the queue. We’re sorry for the continued wait and will connect you with an HR representative as soon as one becomes available.\n\nWhile you wait, you can continue using the bot.`;
+  }
+
+  /**
+   * Sends a plain WhatsApp text message directly through Meta Graph API.
+   *
+   * We deliberately keep this service independent of WhatsappModule to
+   * avoid creating a module dependency cycle between escalation and
+   * WhatsApp/conversation modules.
+   */
+  private async sendWhatsAppMessage(
+    phoneNumber: string,
+    message: string,
+  ): Promise<boolean> {
+    const accessToken = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
+
+    const phoneNumberId = this.configService.get<string>(
+      'WHATSAPP_PHONE_NUMBER_ID',
+    );
+
+    const apiVersion =
+      this.configService.get<string>('WHATSAPP_GRAPH_API_VERSION') ?? 'v21.0';
+
+    if (!accessToken || !phoneNumberId) {
+      this.logger.error(
+        'Cannot send queue engagement message: WhatsApp credentials are not configured.',
+      );
+
+      return false;
+    }
+
+    const recipient = PhoneNumberNormalizer.normalize(phoneNumber).replace(
+      /^\+/,
+      '',
+    );
+
+    const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+
+    try {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          {
+            messaging_product: 'whatsapp',
+            to: recipient,
+            type: 'text',
+            text: {
+              body: message,
+            },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+
+      return true;
+    } catch (error) {
+      const details =
+        error instanceof AxiosError
+          ? JSON.stringify(error.response?.data ?? error.message)
+          : String(error);
+
+      this.logger.error(
+        `Failed to send queue engagement WhatsApp message to ${recipient}: ${details}`,
+      );
+
+      return false;
+    }
   }
 }

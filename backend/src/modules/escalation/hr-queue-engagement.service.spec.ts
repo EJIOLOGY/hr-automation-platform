@@ -1,4 +1,8 @@
+import { HttpService } from '@nestjs/axios';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { of, throwError } from 'rxjs';
+
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EscalationService } from './escalation.service';
 import {
@@ -26,13 +30,38 @@ describe('HrQueueEngagementService', () => {
     },
   };
 
+  const httpService = {
+    post: jest.fn(),
+  };
+
+  const configService = {
+    get: jest.fn((key: string) => {
+      const values: Record<string, string> = {
+        WHATSAPP_ACCESS_TOKEN: 'test-access-token',
+        WHATSAPP_PHONE_NUMBER_ID: 'test-phone-number-id',
+        WHATSAPP_GRAPH_API_VERSION: 'v21.0',
+      };
+
+      return values[key];
+    }),
+  };
+
+  const employee = {
+    fullName: 'Ejiro Example',
+    phoneNumber: '08000000000',
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
+
+    httpService.post.mockReturnValue(of({ data: {} }));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         HrQueueEngagementService,
         { provide: PrismaService, useValue: prisma },
+        { provide: HttpService, useValue: httpService },
+        { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
@@ -55,7 +84,7 @@ describe('HrQueueEngagementService', () => {
         id: 'esc-1',
         sessionId: 'session-1',
         createdAt,
-        employee: { fullName: 'Ejiro Example' },
+        employee,
       },
     ]);
     prisma.chatMessage.findFirst.mockResolvedValue(null);
@@ -65,6 +94,7 @@ describe('HrQueueEngagementService', () => {
     );
 
     expect(sent).toBe(0);
+    expect(httpService.post).not.toHaveBeenCalled();
     expect(prisma.chatMessage.create).not.toHaveBeenCalled();
   });
 
@@ -76,7 +106,7 @@ describe('HrQueueEngagementService', () => {
         id: 'esc-1',
         sessionId: 'session-1',
         createdAt,
-        employee: { fullName: 'Ejiro Example' },
+        employee,
       },
     ]);
     prisma.chatMessage.findFirst.mockResolvedValue(null);
@@ -89,6 +119,23 @@ describe('HrQueueEngagementService', () => {
     );
 
     expect(sent).toBe(1);
+    expect(httpService.post).toHaveBeenCalledWith(
+      'https://graph.facebook.com/v21.0/test-phone-number-id/messages',
+      expect.objectContaining({
+        messaging_product: 'whatsapp',
+        to: '2348000000000',
+        type: 'text',
+        text: {
+          body: expect.stringContaining('number 2 in the HR queue'),
+        },
+      }),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-access-token',
+          'Content-Type': 'application/json',
+        }),
+      }),
+    );
     expect(prisma.chatMessage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         sessionId: 'session-1',
@@ -108,7 +155,7 @@ describe('HrQueueEngagementService', () => {
         id: 'esc-1',
         sessionId: 'session-1',
         createdAt,
-        employee: { fullName: 'Ejiro Example' },
+        employee,
       },
     ]);
     prisma.chatMessage.findFirst.mockResolvedValue({
@@ -123,6 +170,7 @@ describe('HrQueueEngagementService', () => {
     );
 
     expect(sent).toBe(1);
+    expect(httpService.post).toHaveBeenCalled();
     expect(prisma.chatMessage.create).toHaveBeenCalled();
   });
 
@@ -135,7 +183,7 @@ describe('HrQueueEngagementService', () => {
         id: 'esc-1',
         sessionId: 'session-1',
         createdAt,
-        employee: { fullName: 'Ejiro Example' },
+        employee,
       },
     ]);
     prisma.chatMessage.findFirst.mockResolvedValue({
@@ -148,6 +196,7 @@ describe('HrQueueEngagementService', () => {
     );
 
     expect(sent).toBe(0);
+    expect(httpService.post).not.toHaveBeenCalled();
     expect(prisma.chatMessage.create).not.toHaveBeenCalled();
   });
 
@@ -160,7 +209,7 @@ describe('HrQueueEngagementService', () => {
         id: 'esc-1',
         sessionId: 'session-1',
         createdAt,
-        employee: { fullName: 'Ejiro Example' },
+        employee,
       },
     ]);
     prisma.chatMessage.findFirst.mockResolvedValue({
@@ -175,6 +224,7 @@ describe('HrQueueEngagementService', () => {
     );
 
     expect(sent).toBe(1);
+    expect(httpService.post).toHaveBeenCalled();
     expect(prisma.chatMessage.create).toHaveBeenCalled();
   });
 
@@ -186,6 +236,7 @@ describe('HrQueueEngagementService', () => {
     );
 
     expect(sent).toBe(0);
+    expect(httpService.post).not.toHaveBeenCalled();
     expect(prisma.chatMessage.create).not.toHaveBeenCalled();
   });
 
@@ -197,7 +248,7 @@ describe('HrQueueEngagementService', () => {
         id: 'esc-2',
         sessionId: 'session-2',
         createdAt,
-        employee: { fullName: 'Ejiro Example' },
+        employee,
       },
     ]);
     prisma.chatMessage.findFirst.mockResolvedValue(null);
@@ -209,13 +260,42 @@ describe('HrQueueEngagementService', () => {
       new Date('2026-08-20T10:05:00.000Z'),
     );
 
-    expect(prisma.chatMessage.create).toHaveBeenCalledWith(
+    expect(httpService.post).toHaveBeenCalledWith(
+      expect.any(String),
       expect.objectContaining({
-        data: expect.objectContaining({
-          content: expect.stringContaining('number 4 in the HR queue'),
-        }),
+        text: {
+          body: expect.stringContaining('number 4 in the HR queue'),
+        },
       }),
+      expect.any(Object),
     );
+  });
+
+  it('does not persist the engagement message when WhatsApp delivery fails', async () => {
+    const createdAt = new Date('2026-08-20T10:00:00.000Z');
+
+    prisma.escalation.findMany.mockResolvedValue([
+      {
+        id: 'esc-1',
+        sessionId: 'session-1',
+        createdAt,
+        employee,
+      },
+    ]);
+    prisma.chatMessage.findFirst.mockResolvedValue(null);
+    prisma.chatMessage.count.mockResolvedValue(0);
+    prisma.escalation.count.mockResolvedValue(1);
+
+    httpService.post.mockReturnValueOnce(
+      throwError(() => new Error('WhatsApp unavailable')),
+    );
+
+    const sent = await service.processWaitingEscalations(
+      new Date('2026-08-20T10:05:00.000Z'),
+    );
+
+    expect(sent).toBe(0);
+    expect(prisma.chatMessage.create).not.toHaveBeenCalled();
   });
 });
 

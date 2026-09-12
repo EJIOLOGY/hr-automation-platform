@@ -5,6 +5,7 @@ import { EscalationStatus } from '../../generated/prisma/enums';
 import { AuditService } from '../audit/audit.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
+import { HrDocumentRequestService } from '../verification/hr-document-request.service';
 import { DashboardConversationsService } from './dashboard-conversations.service';
 
 describe('DashboardConversationsService', () => {
@@ -19,6 +20,9 @@ describe('DashboardConversationsService', () => {
     chatMessage: {
       findMany: jest.fn(),
       create: jest.fn(),
+    },
+    escalation: {
+      findMany: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -35,8 +39,37 @@ describe('DashboardConversationsService', () => {
     notifyNewMessage: jest.fn(),
   };
 
+  const hrDocumentRequestService = {
+    createRequest: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
+
+    // getMessages() resolves dashboard queue display data from the Escalation delegate.
+    // Keep this delegate explicitly mocked so the Nest unit-test Prisma double matches
+    // the service's runtime dependency surface.
+    prisma.escalation.findMany.mockResolvedValue([]);
+
+    hrDocumentRequestService.createRequest.mockImplementation(
+      (documentTypeId: string) => {
+        const labels: Record<string, string> = {
+          employment_verification_letter:
+            'Employment Verification Letter (EVL)',
+          salary_certificate: 'Salary Certificate',
+          no_objection_certificate: 'No Objection Certificate (NOC)',
+          other_hr_document: 'Other HR Document',
+        };
+
+        const label = labels[documentTypeId];
+        return label
+          ? {
+              id: documentTypeId,
+              label,
+            }
+          : null;
+      },
+    );
 
     whatsappGraphClient.sendMessage.mockResolvedValue(true);
 
@@ -65,6 +98,10 @@ describe('DashboardConversationsService', () => {
         {
           provide: RealtimeGateway,
           useValue: realtimeGateway,
+        },
+        {
+          provide: HrDocumentRequestService,
+          useValue: hrDocumentRequestService,
         },
       ],
     }).compile();

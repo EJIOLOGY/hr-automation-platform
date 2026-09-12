@@ -12,6 +12,7 @@ import { MENU_CONFIG, MENU_IDS } from '../chat/menu.config';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
 import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
+import { HrDocumentRequestService } from '../verification/hr-document-request.service';
 
 interface ConversationCursor {
   lastActivityAt: string;
@@ -30,6 +31,7 @@ export class DashboardConversationsService {
     private readonly auditService: AuditService,
     private readonly whatsappGraphClient: WhatsappGraphClient,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly hrDocumentRequestService: HrDocumentRequestService,
   ) {}
 
   private encodeCursor(cursor: ConversationCursor | MessageCursor): string {
@@ -290,10 +292,36 @@ export class DashboardConversationsService {
         direction: true,
         messageType: true,
         content: true,
+        createdAt: true,
       },
     });
 
-    const displayContentByMessageId = this.buildDisplayContentMap(allMessages);
+    const escalations = await this.prisma.escalation.findMany({
+      where: {
+        sessionId,
+      },
+      orderBy: [
+        {
+          createdAt: 'asc',
+        },
+        {
+          id: 'asc',
+        },
+      ],
+      select: {
+        id: true,
+        reason: true,
+        status: true,
+        category: true,
+        documentType: true,
+        createdAt: true,
+      },
+    });
+
+    const displayContentByMessageId = await this.buildDisplayContentMap(
+      allMessages,
+      escalations,
+    );
 
     const items = pageItems.reverse().map((message) => ({
       ...message,
@@ -317,22 +345,39 @@ export class DashboardConversationsService {
     };
   }
 
-  private buildDisplayContentMap(
+  private async buildDisplayContentMap(
     messages: Array<{
       id: string;
       direction: string;
       messageType: string;
       content: string;
+      createdAt: Date;
     }>,
-  ): Map<string, string> {
+    escalations: Array<{
+      id: string;
+      reason: string;
+      status: EscalationStatus;
+      category: string | null;
+      documentType: string | null;
+      createdAt: Date;
+    }>,
+  ): Promise<Map<string, string>> {
     const displayContentByMessageId = new Map<string, string>();
     let currentState = 'MAIN_MENU';
+    let currentDocumentTypeId: string | undefined;
 
     for (const message of messages) {
       const transition = this.parseStateTransition(message.content);
 
       if (transition) {
         currentState = transition.nextState;
+
+        if (
+          transition.nextState !== 'DOCUMENT_REQUEST_MENU' &&
+          transition.nextState !== 'VERIFICATION_MENU'
+        ) {
+          currentDocumentTypeId = undefined;
+        }
 
         displayContentByMessageId.set(
           message.id,
@@ -347,7 +392,12 @@ export class DashboardConversationsService {
       if (queueMessage) {
         displayContentByMessageId.set(
           message.id,
-          this.getQueueDisplayMessage(queueMessage),
+          await this.getQueueDisplayMessage(
+            queueMessage,
+            escalations,
+            message.createdAt,
+            currentDocumentTypeId,
+          ),
         );
 
         continue;
@@ -381,6 +431,10 @@ export class DashboardConversationsService {
           message.id,
           `[${selectionNumber}] ${option.label}`,
         );
+
+        if (menuId === MENU_IDS.DOCUMENT_REQUEST) {
+          currentDocumentTypeId = option.id;
+        }
       }
     }
 
@@ -471,7 +525,7 @@ export class DashboardConversationsService {
     return undefined;
   }
 
-  private getQueueDisplayMessage(
+  private async getQueueDisplayMessage(
     queueMessage:
       | {
           type: 'escalation';
@@ -482,16 +536,142 @@ export class DashboardConversationsService {
           type: 'queue_engagement';
           message: string;
         },
-  ): string {
-    if (queueMessage.type === 'escalation') {
-      const reason = this.humanizeEscalationReason(queueMessage.reason);
+    escalations: Array<{
+      id: string;
+      reason: string;
+      status: EscalationStatus;
+      category: string | null;
+      documentType: string | null;
+      createdAt: Date;
+    }>,
+    messageCreatedAt: Date,
+    currentDocumentTypeId?: string,
+  ): Promise<string> {
+    if (queueMessage.type === 'queue_engagement') {
+      const escalation = this.findEscalationForMessage(
+        escalations,
+        messageCreatedAt,
+      );
 
-      return `Employee requested HR assistance${
-        reason ? ` for ${reason}` : ''
-      }. Queue position: ${queueMessage.queuePosition}.`;
+      const queuePosition = escalation
+        ? await this.getCurrentQueuePosition(escalations, escalation.id)
+        : null;
+
+      if (queuePosition !== null) {
+        return this.humanizeQueueEngagementMessage(
+          queueMessage.message,
+          queuePosition,
+        );
+      }
+
+      return this.humanizeQueueEngagementMessage(queueMessage.message);
     }
 
-    return this.humanizeQueueEngagementMessage(queueMessage.message);
+    const escalation = this.findEscalationForMessage(
+      escalations,
+      messageCreatedAt,
+      queueMessage.reason,
+    );
+
+    const documentTypeId =
+      escalation?.documentType?.trim() || currentDocumentTypeId;
+
+    if (documentTypeId && this.isDocumentRequestReason(queueMessage.reason)) {
+      const documentRequest =
+        this.hrDocumentRequestService.createRequest(documentTypeId);
+
+      if (documentRequest) {
+        const queuePosition = escalation
+          ? await this.getCurrentQueuePosition(escalations, escalation.id)
+          : null;
+
+        return `Employee requested a document: ${
+          documentRequest.label
+        }. Queue position: ${queuePosition ?? queueMessage.queuePosition}.`;
+      }
+    }
+
+    const reason = this.humanizeEscalationReason(queueMessage.reason);
+
+    const queuePosition = escalation
+      ? await this.getCurrentQueuePosition(escalations, escalation.id)
+      : null;
+
+    return `Employee requested HR assistance${
+      reason ? ` for ${reason}` : ''
+    }. Queue position: ${queuePosition ?? queueMessage.queuePosition}.`;
+  }
+
+  private findEscalationForMessage(
+    escalations: Array<{
+      id: string;
+      reason: string;
+      status: EscalationStatus;
+      category: string | null;
+      documentType: string | null;
+      createdAt: Date;
+    }>,
+    messageCreatedAt: Date,
+    reason?: string,
+  ) {
+    const matching = escalations.filter(
+      (escalation) =>
+        escalation.createdAt.getTime() <= messageCreatedAt.getTime() &&
+        (!reason ||
+          escalation.reason.trim().toLowerCase() ===
+            reason.trim().toLowerCase()),
+    );
+
+    return (
+      matching[matching.length - 1] ??
+      escalations
+        .filter(
+          (escalation) =>
+            escalation.createdAt.getTime() <= messageCreatedAt.getTime(),
+        )
+        .at(-1)
+    );
+  }
+
+  private async getCurrentQueuePosition(
+    escalations: Array<{
+      id: string;
+      reason: string;
+      status: EscalationStatus;
+      category: string | null;
+      documentType: string | null;
+      createdAt: Date;
+    }>,
+    escalationId: string,
+  ): Promise<number | null> {
+    const escalation = escalations.find(
+      (candidate) => candidate.id === escalationId,
+    );
+
+    if (!escalation || escalation.status !== EscalationStatus.OPEN) {
+      return null;
+    }
+
+    const requestsAhead = escalations.filter(
+      (candidate) =>
+        candidate.status === EscalationStatus.OPEN &&
+        (candidate.createdAt.getTime() < escalation.createdAt.getTime() ||
+          (candidate.createdAt.getTime() === escalation.createdAt.getTime() &&
+            candidate.id < escalation.id)),
+    ).length;
+
+    return requestsAhead + 1;
+  }
+
+  private isDocumentRequestReason(reason: string): boolean {
+    const normalizedReason = reason.trim().replace(/\s+/g, '_').toUpperCase();
+
+    return [
+      'DOCUMENT',
+      'HR_DOCUMENT',
+      'DOCUMENT_REQUEST',
+      'EMPLOYMENT_VERIFICATION',
+    ].includes(normalizedReason);
   }
 
   private humanizeEscalationReason(reason: string): string {
@@ -508,6 +688,7 @@ export class DashboardConversationsService {
       BENEFITS: 'a benefits-related matter',
       DOCUMENT: 'an HR document request',
       HR_DOCUMENT: 'an HR document request',
+      DOCUMENT_REQUEST: 'an HR document request',
       EMPLOYMENT_VERIFICATION: 'an employment verification request',
     };
 
@@ -522,19 +703,31 @@ export class DashboardConversationsService {
     );
   }
 
-  private humanizeQueueEngagementMessage(message: string): string {
+  private humanizeQueueEngagementMessage(
+    message: string,
+    queuePosition?: number,
+  ): string {
     const normalizedMessage = message.trim();
 
     if (!normalizedMessage) {
       return 'HR queue status updated.';
     }
 
-    return normalizedMessage
+    const humanizedMessage = normalizedMessage
       .replace(/QUEUE_POSITION/gi, 'queue position')
       .replace(/IN_PROGRESS/gi, 'being attended to')
       .replace(/_+/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim();
+
+    if (queuePosition === undefined) {
+      return humanizedMessage;
+    }
+
+    return humanizedMessage.replace(
+      /\bnumber \d+\b/gi,
+      `number ${queuePosition}`,
+    );
   }
 
   private getMenuIdForState(state: string): string | undefined {
