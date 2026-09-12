@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -26,15 +27,25 @@ const RealtimeContext = createContext<RealtimeContextValue | null>(null);
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { accessToken, refreshAuth } = useAuth();
+
   const socketRef = useRef<Socket | null>(null);
+  const refreshAuthRef = useRef(refreshAuth);
+  const refreshInFlightRef = useRef(false);
+
   const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    refreshAuthRef.current = refreshAuth;
+  }, [refreshAuth]);
 
   useEffect(() => {
     if (!accessToken) {
       socketRef.current?.disconnect();
       socketRef.current = null;
+
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsConnected(false);
+
       return;
     }
 
@@ -45,46 +56,91 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     });
 
     socketRef.current = socket;
+    refreshInFlightRef.current = false;
 
-    socket.on("connect", () => setIsConnected(true));
-    socket.on("disconnect", () => setIsConnected(false));
+    const handleConnect = () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
 
-    // If the access token expired, the gateway drops the connection during
-    // handshake. Refresh once and reconnect with the new token rather than
-    // leaving the dashboard silently stuck without realtime updates.
-    socket.on("connect_error", () => {
-      void refreshAuth();
-    });
+      setIsConnected(true);
+    };
 
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
+    const handleDisconnect = () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+
       setIsConnected(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    const handleConnectError = () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+
+      if (refreshInFlightRef.current) {
+        return;
+      }
+
+      refreshInFlightRef.current = true;
+
+      void refreshAuthRef.current().finally(() => {
+        refreshInFlightRef.current = false;
+      });
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
+
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+        setIsConnected(false);
+      }
+
+      socket.disconnect();
+    };
   }, [accessToken]);
+
+  const joinConversation = useCallback((sessionId: string) => {
+    socketRef.current?.emit("conversation:join", sessionId);
+  }, []);
+
+  const leaveConversation = useCallback((sessionId: string) => {
+    socketRef.current?.emit("conversation:leave", sessionId);
+  }, []);
+
+  const on = useCallback(
+    (event: string, handler: (...args: unknown[]) => void): (() => void) => {
+      const socket = socketRef.current;
+
+      if (!socket) {
+        return () => {};
+      }
+
+      socket.on(event, handler);
+
+      return () => {
+        socket.off(event, handler);
+      };
+    },
+    [],
+  );
 
   const value = useMemo<RealtimeContextValue>(
     () => ({
       isConnected,
-      joinConversation: (sessionId: string) => {
-        socketRef.current?.emit("conversation:join", sessionId);
-      },
-      leaveConversation: (sessionId: string) => {
-        socketRef.current?.emit("conversation:leave", sessionId);
-      },
-      on: (event: string, handler: (...args: unknown[]) => void) => {
-        const socket = socketRef.current;
-
-        if (!socket) {
-          return () => {};
-        }
-
-        socket.on(event, handler);
-        return () => socket.off(event, handler);
-      },
+      joinConversation,
+      leaveConversation,
+      on,
     }),
-    [isConnected],
+    [isConnected, joinConversation, leaveConversation, on],
   );
 
   return (
