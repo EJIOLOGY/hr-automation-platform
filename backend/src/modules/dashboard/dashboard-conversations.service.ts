@@ -269,7 +269,9 @@ export class DashboardConversationsService {
      * replay the deterministic menu state and resolve historical numeric
      * employee selections against the menu that was active at that point.
      *
-     * This deliberately uses MENU_CONFIG as the single source of truth.
+     * Technical system messages remain stored exactly as they are.
+     * buildDisplayContentMap() only creates a human-friendly representation
+     * for the dashboard.
      */
     const allMessages = await this.prisma.chatMessage.findMany({
       where: {
@@ -331,6 +333,23 @@ export class DashboardConversationsService {
 
       if (transition) {
         currentState = transition.nextState;
+
+        displayContentByMessageId.set(
+          message.id,
+          this.getStateTransitionDisplayMessage(transition),
+        );
+
+        continue;
+      }
+
+      const queueMessage = this.parseQueueSystemMessage(message.content);
+
+      if (queueMessage) {
+        displayContentByMessageId.set(
+          message.id,
+          this.getQueueDisplayMessage(queueMessage),
+        );
+
         continue;
       }
 
@@ -381,6 +400,141 @@ export class DashboardConversationsService {
       previousState: match[1],
       nextState: match[2],
     };
+  }
+
+  private getStateTransitionDisplayMessage(transition: {
+    previousState: string;
+    nextState: string;
+  }): string {
+    const stateMessages: Record<string, string> = {
+      MAIN_MENU: 'Employee returned to the main menu.',
+      POLICY_MENU: 'Employee opened HR Questions.',
+      LEAVE_MENU: 'Employee opened Leave & Time Off.',
+      BENEFITS_MENU: 'Employee opened Benefits.',
+      VERIFICATION_MENU: 'Employee opened HR Document Requests.',
+      DOCUMENT_REQUEST_MENU: 'Employee opened HR Document Requests.',
+    };
+
+    const message = stateMessages[transition.nextState];
+
+    if (message) {
+      return message;
+    }
+
+    return `Employee moved to ${this.humanizeStateName(transition.nextState)}.`;
+  }
+
+  private humanizeStateName(state: string): string {
+    return state
+      .replace(/_MENU$/i, '')
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+
+  private parseQueueSystemMessage(content: string):
+    | {
+        type: 'escalation';
+        reason: string;
+        queuePosition: number;
+      }
+    | {
+        type: 'queue_engagement';
+        message: string;
+      }
+    | undefined {
+    const normalizedContent = content.trim();
+
+    const escalationMatch = /^ESCALATION:(.+?):QUEUE_POSITION:(\d+)$/i.exec(
+      normalizedContent,
+    );
+
+    if (escalationMatch) {
+      return {
+        type: 'escalation',
+        reason: escalationMatch[1],
+        queuePosition: Number(escalationMatch[2]),
+      };
+    }
+
+    const queueEngagementMatch = /^HR_QUEUE_ENGAGEMENT:(.+)$/i.exec(
+      normalizedContent,
+    );
+
+    if (queueEngagementMatch) {
+      return {
+        type: 'queue_engagement',
+        message: queueEngagementMatch[1],
+      };
+    }
+
+    return undefined;
+  }
+
+  private getQueueDisplayMessage(
+    queueMessage:
+      | {
+          type: 'escalation';
+          reason: string;
+          queuePosition: number;
+        }
+      | {
+          type: 'queue_engagement';
+          message: string;
+        },
+  ): string {
+    if (queueMessage.type === 'escalation') {
+      const reason = this.humanizeEscalationReason(queueMessage.reason);
+
+      return `Employee requested HR assistance${
+        reason ? ` for ${reason}` : ''
+      }. Queue position: ${queueMessage.queuePosition}.`;
+    }
+
+    return this.humanizeQueueEngagementMessage(queueMessage.message);
+  }
+
+  private humanizeEscalationReason(reason: string): string {
+    const normalizedReason = reason.trim();
+
+    if (!normalizedReason) {
+      return '';
+    }
+
+    const reasonLabels: Record<string, string> = {
+      PERSONAL: 'a personal matter',
+      PERSONAL_MATTER: 'a personal matter',
+      LEAVE: 'a leave-related matter',
+      BENEFITS: 'a benefits-related matter',
+      DOCUMENT: 'an HR document request',
+      HR_DOCUMENT: 'an HR document request',
+      EMPLOYMENT_VERIFICATION: 'an employment verification request',
+    };
+
+    const normalizedKey = normalizedReason.replace(/\s+/g, '_').toUpperCase();
+
+    return (
+      reasonLabels[normalizedKey] ??
+      normalizedReason
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, (character) => character.toUpperCase())
+    );
+  }
+
+  private humanizeQueueEngagementMessage(message: string): string {
+    const normalizedMessage = message.trim();
+
+    if (!normalizedMessage) {
+      return 'HR queue status updated.';
+    }
+
+    return normalizedMessage
+      .replace(/QUEUE_POSITION/gi, 'queue position')
+      .replace(/IN_PROGRESS/gi, 'being attended to')
+      .replace(/_+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   }
 
   private getMenuIdForState(state: string): string | undefined {
