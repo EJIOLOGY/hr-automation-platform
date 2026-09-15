@@ -1,13 +1,7 @@
 "use client";
 
 import { ChangeEvent, useRef, useState } from "react";
-import {
-  CheckCircle2,
-  Download,
-  FileSpreadsheet,
-  Upload,
-  X,
-} from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, X } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -163,16 +157,14 @@ export function EmployeeImportDialog({
     >
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <h2
-              id="employee-import-title"
-              className="text-[17px] font-semibold leading-6 text-foreground"
-            >
-              {result
-                ? "Employee Spreadsheet Updated"
-                : "Import Employee Spreadsheet"}
-            </h2>
-          </div>
+          <h2
+            id="employee-import-title"
+            className="text-[17px] font-semibold leading-6 text-foreground"
+          >
+            {result
+              ? "Employee Spreadsheet Updated"
+              : "Import Employee Spreadsheet"}
+          </h2>
 
           <button
             type="button"
@@ -275,10 +267,6 @@ export function EmployeeImportDialog({
                 >
                   <FileSpreadsheet className="size-4" aria-hidden="true" />
                   Failed Rows
-                  <Download
-                    className="size-3.5 text-muted-foreground"
-                    aria-hidden="true"
-                  />
                 </button>
               ) : null}
 

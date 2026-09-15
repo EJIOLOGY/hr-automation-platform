@@ -20,6 +20,12 @@ export class PhoneNumberNormalizer {
       return `+${normalized}`;
     }
 
+    // A valid Nigerian mobile number without its local leading zero
+    // must begin with 7, 8, or 9 and contain exactly 10 digits.
+    if (/^[789]\d{9}$/.test(normalized)) {
+      return `+234${normalized}`;
+    }
+
     throw new Error('Invalid Nigerian mobile phone number');
   }
 }

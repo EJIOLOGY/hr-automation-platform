@@ -61,6 +61,10 @@ export interface ConversationMessagesResponse {
 
 export type EscalationStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 
+/**
+ * In the backend, HR document requests are modeled as Escalation records
+ * with category 'DOCUMENT_REQUEST' and share the EscalationStatus enum lifecycle.
+ */
 export type HrRequestStatus = EscalationStatus;
 
 type QueueEmployee = ConversationEmployee;
@@ -286,7 +290,9 @@ export async function downloadFailedRowsReport(
   accessToken: string,
 ): Promise<Blob> {
   const response = await fetch(
-    `${dashboardApiUrl}/dashboard/employees/import-reports/failed-rows/${encodeURIComponent(filename)}`,
+    `${dashboardApiUrl}/dashboard/employees/import-reports/failed-rows/${encodeURIComponent(
+      filename,
+    )}`,
     {
       method: "GET",
       headers: {

@@ -131,7 +131,11 @@ export class DashboardEmployeesController {
       if (!fileStats.isFile()) {
         throw new NotFoundException('Failed rows report not found.');
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
       throw new NotFoundException('Failed rows report not found.');
     }
 
