@@ -38,6 +38,7 @@ export class EmployeeImportService {
       if (error instanceof EmployeeImportParseError) {
         throw error;
       }
+
       throw error;
     }
 
@@ -46,6 +47,7 @@ export class EmployeeImportService {
 
     for (const { row, data } of parsed.rows) {
       const result = await this.importRow(row, data, seenEmployeeNumbers);
+
       results.push(result);
     }
 
@@ -83,6 +85,7 @@ export class EmployeeImportService {
     data: {
       employeeNumber: string | undefined;
       fullName: string | undefined;
+      email: string | undefined;
       designation: string | undefined;
       phoneNumber: string | undefined;
     },
@@ -93,6 +96,7 @@ export class EmployeeImportService {
         row,
         outcome: 'error',
         fullName: data.fullName,
+        email: data.email,
         designation: data.designation,
         phoneNumber: data.phoneNumber,
         error: 'Missing employee ID.',
@@ -105,11 +109,13 @@ export class EmployeeImportService {
         outcome: 'error',
         employeeNumber: data.employeeNumber,
         fullName: data.fullName,
+        email: data.email,
         designation: data.designation,
         phoneNumber: data.phoneNumber,
         error: `Duplicate employee ID (${data.employeeNumber}) in this file.`,
       };
     }
+
     seenEmployeeNumbers.add(data.employeeNumber);
 
     if (!data.fullName) {
@@ -117,6 +123,7 @@ export class EmployeeImportService {
         row,
         outcome: 'error',
         employeeNumber: data.employeeNumber,
+        email: data.email,
         designation: data.designation,
         phoneNumber: data.phoneNumber,
         error: 'Missing employee name.',
@@ -129,6 +136,7 @@ export class EmployeeImportService {
         outcome: 'error',
         employeeNumber: data.employeeNumber,
         fullName: data.fullName,
+        email: data.email,
         designation: data.designation,
         error:
           'Missing WhatsApp phone number — employee cannot be matched to bot messages without it.',
@@ -145,6 +153,7 @@ export class EmployeeImportService {
         outcome: 'error',
         employeeNumber: data.employeeNumber,
         fullName: data.fullName,
+        email: data.email,
         designation: data.designation,
         phoneNumber: data.phoneNumber,
         error: `Invalid phone number "${data.phoneNumber}".`,
@@ -164,12 +173,18 @@ export class EmployeeImportService {
 
     try {
       const existing = await this.prisma.employee.findUnique({
-        where: { employeeNumber: upsertInput.employeeNumber },
-        select: { id: true },
+        where: {
+          employeeNumber: upsertInput.employeeNumber,
+        },
+        select: {
+          id: true,
+        },
       });
 
       await this.prisma.employee.upsert({
-        where: { employeeNumber: upsertInput.employeeNumber },
+        where: {
+          employeeNumber: upsertInput.employeeNumber,
+        },
         create: upsertInput,
         update: {
           fullName: upsertInput.fullName,
@@ -191,6 +206,7 @@ export class EmployeeImportService {
         outcome: 'error',
         employeeNumber: data.employeeNumber,
         fullName: data.fullName,
+        email: data.email,
         designation: data.designation,
         phoneNumber: data.phoneNumber,
         error: this.describePrismaError(error, normalizedPhoneNumber),

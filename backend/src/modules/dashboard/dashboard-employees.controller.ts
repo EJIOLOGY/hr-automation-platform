@@ -34,7 +34,8 @@ const FAILED_ROWS_REPORT_DIRECTORY = join(
   'employee-import',
 );
 
-const FAILED_ROWS_REPORT_PATTERN = /^failed-employee-rows-[\dT-]+\.xlsx$/;
+const FAILED_ROWS_REPORT_PATTERN =
+  /^failed-employee-rows-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.xlsx$/;
 
 @Controller('dashboard/employees')
 @UseGuards(JwtAuthGuard)

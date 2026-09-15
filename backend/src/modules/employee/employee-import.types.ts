@@ -9,6 +9,7 @@ import type { EmployeeStatus } from '../../generated/prisma/client';
 export interface RawEmployeeRow {
   employeeNumber: string | undefined;
   fullName: string | undefined;
+  email: string | undefined;
   designation: string | undefined;
   phoneNumber: string | undefined;
 }
@@ -30,6 +31,7 @@ export interface ImportRowResult {
 
   employeeNumber?: string;
   fullName?: string;
+  email?: string;
   designation?: string;
   phoneNumber?: string;
 

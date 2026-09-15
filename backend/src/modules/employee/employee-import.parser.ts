@@ -22,6 +22,7 @@ export class EmployeeImportParseError extends Error {
 const HEADER_ALIASES: Record<keyof RawEmployeeRow, string[]> = {
   employeeNumber: ['employee i.d', 'employee id', 'staff id', 'employeenumber'],
   fullName: ['name', 'full name', 'employee name'],
+  email: ['email', 'email address', 'employee email'],
   designation: [
     'current designation',
     'designation',
@@ -68,6 +69,7 @@ function buildColumnMap(
     const aliases = HEADER_ALIASES[field].map((alias) =>
       alias.trim().toLowerCase(),
     );
+
     const columnIndex = normalizedHeaders.findIndex((header) =>
       aliases.includes(header.trim()),
     );
@@ -82,6 +84,7 @@ function buildColumnMap(
 
 function cellToString(value: unknown): string | undefined {
   const text = cellToPrimitiveString(value).trim();
+
   return text.length > 0 ? text : undefined;
 }
 
@@ -110,6 +113,7 @@ export function parseEmployeeSpreadsheet(
   }
 
   const sheet = workbook.Sheets[sheetName];
+
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     defval: undefined,
@@ -123,6 +127,7 @@ export function parseEmployeeSpreadsheet(
   }
 
   const columnMap = buildColumnMap(headerRow);
+
   const missingRequired = (['employeeNumber', 'fullName'] as const).filter(
     (field) => !columnMap.has(field),
   );
@@ -137,6 +142,9 @@ export function parseEmployeeSpreadsheet(
     const data: RawEmployeeRow = {
       employeeNumber: cellToString(row[columnMap.get('employeeNumber')!]),
       fullName: cellToString(row[columnMap.get('fullName')!]),
+      email: columnMap.has('email')
+        ? cellToString(row[columnMap.get('email')!])
+        : undefined,
       designation: columnMap.has('designation')
         ? cellToString(row[columnMap.get('designation')!])
         : undefined,
