@@ -61,10 +61,6 @@ export interface ConversationMessagesResponse {
 
 export type EscalationStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 
-/**
- * In the backend, HR document requests are modeled as Escalation records
- * with category 'DOCUMENT_REQUEST' and share the EscalationStatus enum lifecycle.
- */
 export type HrRequestStatus = EscalationStatus;
 
 type QueueEmployee = ConversationEmployee;
@@ -135,6 +131,7 @@ export interface EmployeeImportResult {
   updated: number;
   failed: number;
   needsDepartmentReview: number;
+  failedRowsReportFilename: string | null;
 }
 
 const dashboardApiUrl =
@@ -282,6 +279,36 @@ export async function importEmployees(
       body: formData,
     },
   );
+}
+
+export async function downloadFailedRowsReport(
+  filename: string,
+  accessToken: string,
+): Promise<Blob> {
+  const response = await fetch(
+    `${dashboardApiUrl}/dashboard/employees/import-reports/failed-rows/${encodeURIComponent(filename)}`,
+    {
+      method: "GET",
+      headers: {
+        Accept:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      credentials: "include",
+    },
+  );
+
+  if (response.status === 401) {
+    const { ApiError } = await import("./auth-api");
+
+    throw new ApiError(401, "Unauthorized. Please log in again.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Unable to download the failed rows report.");
+  }
+
+  return response.blob();
 }
 
 async function dashboardRequest<T>(
