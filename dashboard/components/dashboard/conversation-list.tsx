@@ -2,13 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, MessageSquare, RefreshCw, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { getConversations, type Conversation } from "@/lib/dashboard-api";
 import { ApiError } from "@/lib/auth-api";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useRealtime } from "./realtime-provider";
 import { cn } from "@/lib/utils";
 import { useConversationSelection } from "./conversation-context";
+import { EmployeeImportDialog } from "./employee-import-dialog";
 
 type ConversationFilter = "all" | "unread" | "escalated";
 
@@ -147,16 +154,13 @@ export function ConversationList() {
   const [retryCount, setRetryCount] = useState(0);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ConversationFilter>("all");
-
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const [isEmployeeImportOpen, setIsEmployeeImportOpen] = useState(false);
+
   const { accessToken, refreshAuth } = useAuth();
   const { selectConversation } = useConversationSelection();
   const { on } = useRealtime();
 
-  // The gateway sends a lightweight signal (no message body) whenever any
-  // conversation changes. React to it with a silent background refetch —
-  // this must NOT reuse retryCount, since that path clears the list to
-  // show a loading skeleton, which would flash on every single message.
   useEffect(() => {
     return on("conversation:list-updated", () => {
       setRefreshSignal((count) => count + 1);
@@ -203,7 +207,7 @@ export function ConversationList() {
             if (active) setError(true);
           }
         } else {
-          if (active) setError(true);
+          setError(true);
         }
       }
     }
@@ -215,9 +219,6 @@ export function ConversationList() {
     };
   }, [accessToken, refreshAuth, retryCount]);
 
-  // Silent refresh: same data source as above, but never clears the list
-  // first — the realtime signal fires often (any message, any employee),
-  // so this must feel like a quiet update, not a reload.
   useEffect(() => {
     if (refreshSignal === 0) {
       return;
@@ -230,7 +231,10 @@ export function ConversationList() {
 
       try {
         const response = await getConversations(accessToken);
-        if (active) setConversations(response.items);
+
+        if (active) {
+          setConversations(response.items);
+        }
       } catch (err) {
         if (!active || !(err instanceof ApiError) || err.status !== 401) {
           return;
@@ -238,13 +242,16 @@ export function ConversationList() {
 
         try {
           const newToken = await refreshAuth();
+
           if (!active || !newToken) return;
 
           const response = await getConversations(newToken);
-          if (active) setConversations(response.items);
+
+          if (active) {
+            setConversations(response.items);
+          }
         } catch {
-          // Silent refresh failures are non-critical — the next realtime
-          // signal or manual refresh will retry. No error state shown.
+          // Silent refresh failures are non-critical.
         }
       }
     }
@@ -296,10 +303,28 @@ export function ConversationList() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
-      <header className="shrink-0 border-b border-border px-1 py-4">
-        <h1 className="text-[20px] leading-7 font-semibold text-foreground">
-          Conversations
-        </h1>
+      <header className="relative z-50 shrink-0 overflow-visible border-b border-border px-1 py-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-[20px] leading-7 font-semibold text-foreground">
+            Conversations
+          </h1>
+
+          <button
+            type="button"
+            onClick={() => setIsEmployeeImportOpen(true)}
+            aria-label="Import Employee Spreadsheet"
+            className="group relative z-100 flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-blue-rev text-white shadow-sm transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2"
+          >
+            <Plus className="size-5" strokeWidth={2.25} aria-hidden="true" />
+
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute right-0 top-full z-200 mt-2 whitespace-nowrap rounded-md bg-[#202124] px-3 py-2 text-[13px] font-medium text-white opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+            >
+              Import Employee Spreadsheet
+            </span>
+          </button>
+        </div>
 
         <label className="relative mt-4 block">
           <span className="sr-only">Search conversations</span>
@@ -398,6 +423,11 @@ export function ConversationList() {
           />
         ))}
       </div>
+
+      <EmployeeImportDialog
+        open={isEmployeeImportOpen}
+        onClose={() => setIsEmployeeImportOpen(false)}
+      />
     </div>
   );
 }

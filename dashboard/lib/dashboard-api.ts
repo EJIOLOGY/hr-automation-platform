@@ -129,6 +129,14 @@ export interface CursorListResponse<T> {
   nextCursor: string | null;
 }
 
+export interface EmployeeImportResult {
+  totalRows: number;
+  created: number;
+  updated: number;
+  failed: number;
+  needsDepartmentReview: number;
+}
+
 const dashboardApiUrl =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api/v1";
 
@@ -184,6 +192,7 @@ export async function getEscalations(
   status?: EscalationStatus,
 ): Promise<CursorListResponse<EscalationRecord>> {
   const query = status ? `?status=${status}` : "";
+
   return dashboardRequest(`/dashboard/escalations${query}`, accessToken);
 }
 
@@ -226,6 +235,7 @@ export async function getHrRequests(
   status?: HrRequestStatus,
 ): Promise<CursorListResponse<HrRequestRecord>> {
   const query = status ? `?status=${status}` : "";
+
   return dashboardRequest(`/dashboard/hr-requests${query}`, accessToken);
 }
 
@@ -242,10 +252,36 @@ export async function getAuditLogs(
   limit?: number,
 ): Promise<CursorListResponse<AuditLogRecord>> {
   const params = new URLSearchParams();
-  if (cursor) params.set("cursor", cursor);
-  if (limit) params.set("limit", limit.toString());
+
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  if (limit) {
+    params.set("limit", limit.toString());
+  }
+
   const query = params.toString() ? `?${params.toString()}` : "";
+
   return dashboardRequest(`/dashboard/audit-logs${query}`, accessToken);
+}
+
+export async function importEmployees(
+  file: File,
+  accessToken: string,
+): Promise<EmployeeImportResult> {
+  const formData = new FormData();
+
+  formData.append("file", file);
+
+  return dashboardRequest<EmployeeImportResult>(
+    "/dashboard/employees/import",
+    accessToken,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 }
 
 async function dashboardRequest<T>(
@@ -253,13 +289,15 @@ async function dashboardRequest<T>(
   accessToken: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers({ Accept: "application/json" });
+  const headers = new Headers({
+    Accept: "application/json",
+  });
 
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
   }
 
-  if (init.body) {
+  if (init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -271,13 +309,16 @@ async function dashboardRequest<T>(
 
   if (response.status === 401) {
     const { ApiError } = await import("./auth-api");
+
     throw new ApiError(401, "Unauthorized. Please log in again.");
   }
 
   if (!response.ok) {
     let message = "Unable to complete this request.";
+
     try {
       const errorData = await response.json();
+
       if (typeof errorData?.message === "string") {
         message = errorData.message;
       } else if (
@@ -287,8 +328,9 @@ async function dashboardRequest<T>(
         message = errorData.message.join(", ");
       }
     } catch {
-      // Keep default message if response body is not JSON
+      // Keep default message if response body is not JSON.
     }
+
     throw new Error(message);
   }
 

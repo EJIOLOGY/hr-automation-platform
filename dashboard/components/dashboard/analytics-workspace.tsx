@@ -502,7 +502,7 @@ export function AnalyticsWorkspace() {
               <IconRefresh className="size-4" />
               Refresh
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground shadow-sm">
+            <button className="flex h-10 items-center gap-2 rounded-lg bg-brand-blue-rev px-4 text-xs font-medium text-primary-foreground shadow-sm">
               <IconDownload className="size-4" />
               Export
             </button>
