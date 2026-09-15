@@ -1,9 +1,10 @@
 import 'dotenv/config';
-import { readFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { EmployeeModule } from '../src/modules/employee/employee.module';
 import { EmployeeImportService } from '../src/modules/employee/employee-import.service';
+import { EmployeeImportReportService } from '../src/modules/employee/employee-import-report.service';
 import { EmployeeImportParseError } from '../src/modules/employee/employee-import.parser';
 
 /**
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
 
   try {
     const importService = appContext.get(EmployeeImportService);
+    const reportService = appContext.get(EmployeeImportReportService);
 
     console.log(`\nImporting employees from ${basename(filePath)}...\n`);
 
@@ -66,26 +68,59 @@ async function main(): Promise<void> {
     const errorRows = report.results.filter(
       (result) => result.outcome === 'error',
     );
+
     if (errorRows.length > 0) {
       console.log('Rows that failed:');
+
       for (const result of errorRows) {
         console.log(
-          `  Row ${result.row}${result.employeeNumber ? ` (${result.employeeNumber})` : ''}: ${result.error}`,
+          `  Row ${result.row}${
+            result.employeeNumber ? ` (${result.employeeNumber})` : ''
+          }: ${result.error}`,
         );
       }
+
       console.log('');
+    }
+
+    const failedRowsReport = reportService.generateFailedRowsReport(report);
+
+    if (failedRowsReport) {
+      const reportsDirectory = join(
+        process.cwd(),
+        'reports',
+        'employee-import',
+      );
+
+      await mkdir(reportsDirectory, { recursive: true });
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+      const reportPath = join(
+        reportsDirectory,
+        `failed-employee-rows-${timestamp}.xlsx`,
+      );
+
+      await writeFile(reportPath, failedRowsReport);
+
+      console.log(`Failed rows report: ${reportPath}\n`);
     }
 
     const reviewRows = report.results.filter(
       (result) => result.departmentNeedsReview,
     );
+
     if (reviewRows.length > 0) {
       console.log(
-        `Rows imported with department = "Unassigned" (designation didn't match any known department \u2014 review and reclassify in the dashboard):`,
+        'Rows imported with department = "Unassigned" ' +
+          "(designation didn't match any known department — " +
+          'review and reclassify in the dashboard):',
       );
+
       for (const result of reviewRows) {
         console.log(`  Row ${result.row} (${result.employeeNumber})`);
       }
+
       console.log('');
     }
 
@@ -97,9 +132,12 @@ async function main(): Promise<void> {
       console.error(`\nImport aborted: ${error.message}`);
     } else {
       console.error(
-        `\nImport failed: ${error instanceof Error ? error.message : String(error)}`,
+        `\nImport failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     }
+
     process.exitCode = 1;
   } finally {
     await appContext.close();

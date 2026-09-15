@@ -2,6 +2,8 @@
 /dist
 /node_modules
 /build
+/reports/employee-import/
+/data/employees/
 
 # Logs
 logs
