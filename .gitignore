@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+.vscode/
 
 # Build output
 dist/
