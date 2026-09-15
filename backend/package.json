@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "bootstrap:admin": "ts-node scripts/bootstrap-admin.ts"
+    "bootstrap:admin": "ts-node scripts/bootstrap-admin.ts",
+    "import:employees": "ts-node scripts/import-employees.ts"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
@@ -50,7 +51,8 @@
     "resend": "^6.26.0",
     "rxjs": "^7.8.1",
     "socket.io": "4.8.3",
-    "uuid": "^14.0.1"
+    "uuid": "^14.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -63,6 +65,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "^24.0.0",
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.21.0",

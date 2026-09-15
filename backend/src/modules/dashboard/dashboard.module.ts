@@ -6,6 +6,7 @@ import { AuditModule } from '../audit/audit.module';
 import { EscalationModule } from '../escalation/escalation.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { EmployeeModule } from '../employee/employee.module';
 import { HrDocumentRequestService } from '../verification/hr-document-request.service';
 
 import { DashboardController } from './dashboard.controller';
@@ -17,6 +18,7 @@ import { DashboardEscalationsService } from './dashboard-escalations.service';
 import { DashboardHrRequestsController } from './dashboard-hr-requests.controller';
 import { DashboardHrRequestsService } from './dashboard-hr-requests.service';
 import { DashboardAuditLogsController } from './dashboard-audit-logs.controller';
+import { DashboardEmployeesController } from './dashboard-employees.controller';
 
 @Module({
   imports: [
@@ -26,6 +28,7 @@ import { DashboardAuditLogsController } from './dashboard-audit-logs.controller'
     EscalationModule,
     WhatsappModule,
     RealtimeModule,
+    EmployeeModule,
   ],
   controllers: [
     DashboardController,
@@ -33,6 +36,7 @@ import { DashboardAuditLogsController } from './dashboard-audit-logs.controller'
     DashboardEscalationsController,
     DashboardHrRequestsController,
     DashboardAuditLogsController,
+    DashboardEmployeesController,
   ],
   providers: [
     DashboardService,

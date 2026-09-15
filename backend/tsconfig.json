@@ -13,7 +13,7 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    "types": ["node", "jest", "@prisma/client"],
+    "types": ["node", "jest", "@prisma/client", "multer"],
 
     "incremental": true,
     "skipLibCheck": true,
