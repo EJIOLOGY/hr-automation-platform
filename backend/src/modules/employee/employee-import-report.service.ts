@@ -16,13 +16,21 @@ export class EmployeeImportReportService {
     const rows = failedRows.map((result) => ({
       'Spreadsheet Row': result.row,
       'Employee ID': result.employeeNumber ?? '',
+      'Full Name': result.fullName ?? '',
+      Designation: result.designation ?? '',
+      'Phone Number': result.phoneNumber ?? '',
       'Failure Reason': result.error ?? 'Unknown error',
     }));
-
     const worksheet = XLSX.utils.json_to_sheet(rows);
 
-    worksheet['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 80 }];
-
+    worksheet['!cols'] = [
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 40 },
+      { wch: 22 },
+      { wch: 80 },
+    ];
     const workbook = XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Failed Rows');

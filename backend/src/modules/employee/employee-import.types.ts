@@ -25,13 +25,16 @@ export interface EmployeeUpsertInput {
 export type ImportRowOutcome = 'created' | 'updated' | 'error';
 
 export interface ImportRowResult {
-  /** 1-based row number as it appears in the spreadsheet, header row excluded. */
   row: number;
   outcome: ImportRowOutcome;
+
   employeeNumber?: string;
-  /** Present when outcome is 'error'. */
+  fullName?: string;
+  designation?: string;
+  phoneNumber?: string;
+
   error?: string;
-  /** Present when department could not be derived from the designation. */
+
   departmentNeedsReview?: boolean;
 }
 

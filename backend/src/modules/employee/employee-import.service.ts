@@ -89,7 +89,14 @@ export class EmployeeImportService {
     seenEmployeeNumbers: Set<string>,
   ): Promise<ImportRowResult> {
     if (!data.employeeNumber) {
-      return { row, outcome: 'error', error: 'Missing employee ID.' };
+      return {
+        row,
+        outcome: 'error',
+        fullName: data.fullName,
+        designation: data.designation,
+        phoneNumber: data.phoneNumber,
+        error: 'Missing employee ID.',
+      };
     }
 
     if (seenEmployeeNumbers.has(data.employeeNumber)) {
@@ -97,6 +104,9 @@ export class EmployeeImportService {
         row,
         outcome: 'error',
         employeeNumber: data.employeeNumber,
+        fullName: data.fullName,
+        designation: data.designation,
+        phoneNumber: data.phoneNumber,
         error: `Duplicate employee ID (${data.employeeNumber}) in this file.`,
       };
     }
@@ -107,6 +117,8 @@ export class EmployeeImportService {
         row,
         outcome: 'error',
         employeeNumber: data.employeeNumber,
+        designation: data.designation,
+        phoneNumber: data.phoneNumber,
         error: 'Missing employee name.',
       };
     }
@@ -116,8 +128,10 @@ export class EmployeeImportService {
         row,
         outcome: 'error',
         employeeNumber: data.employeeNumber,
+        fullName: data.fullName,
+        designation: data.designation,
         error:
-          'Missing WhatsApp phone number \u2014 employee cannot be matched to bot messages without it.',
+          'Missing WhatsApp phone number — employee cannot be matched to bot messages without it.',
       };
     }
 
@@ -130,6 +144,9 @@ export class EmployeeImportService {
         row,
         outcome: 'error',
         employeeNumber: data.employeeNumber,
+        fullName: data.fullName,
+        designation: data.designation,
+        phoneNumber: data.phoneNumber,
         error: `Invalid phone number "${data.phoneNumber}".`,
       };
     }
@@ -173,6 +190,9 @@ export class EmployeeImportService {
         row,
         outcome: 'error',
         employeeNumber: data.employeeNumber,
+        fullName: data.fullName,
+        designation: data.designation,
+        phoneNumber: data.phoneNumber,
         error: this.describePrismaError(error, normalizedPhoneNumber),
       };
     }
