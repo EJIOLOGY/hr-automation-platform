@@ -465,7 +465,11 @@ export class ConversationService {
     }
 
     if (menuSelection.action === 'open_leave_balance') {
-      return this.handleLeaveBalanceSelection(employeeId, sessionId, phoneNumber);
+      return this.handleLeaveBalanceSelection(
+        employeeId,
+        sessionId,
+        phoneNumber,
+      );
     }
 
     if (
