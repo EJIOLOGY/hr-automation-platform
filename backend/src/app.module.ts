@@ -17,6 +17,7 @@ import { LeaveModule } from './modules/leave/leave.module';
 import { PolicyModule } from './modules/policy/policy.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
     EscalationModule,
     AuditModule,
     HealthModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

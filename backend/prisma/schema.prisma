@@ -45,6 +45,16 @@ enum HrOfficerStatus {
   INACTIVE
 }
 
+enum AnalyticsEventType {
+  SESSION_STARTED
+  MAIN_MENU_VIEWED
+  SERVICE_SELECTED
+  INFORMATION_PROVIDED
+  BOT_COMPLETED
+  ESCALATION_CREATED
+  UNRECOGNIZED_INPUT
+}
+
 model Employee {
   id             String         @id @default(uuid())
   employeeNumber String         @unique
@@ -56,6 +66,7 @@ model Employee {
 
   sessions    ChatSession[]
   escalations Escalation[]
+  analyticsEvents AnalyticsEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -104,6 +115,7 @@ model ChatSession {
 
   messages    ChatMessage[]
   escalations Escalation[]
+  analyticsEvents AnalyticsEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -160,6 +172,7 @@ model Escalation {
 
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
+  analyticsEvents AnalyticsEvent[]
 
   @@index([status])
   @@index([employeeId])
@@ -189,5 +202,32 @@ model AuditLog {
   @@index([action])
   @@index([entityType])
   @@index([entityId])
+  @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id String @id @default(uuid())
+
+  type AnalyticsEventType
+
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  escalationId String?
+  escalation   Escalation? @relation(fields: [escalationId], references: [id], onDelete: SetNull)
+
+  metadata Json?
+
+  reviewedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([sessionId])
+  @@index([employeeId])
+  @@index([escalationId])
   @@index([createdAt])
 }
