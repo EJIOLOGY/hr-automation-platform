@@ -2,7 +2,7 @@ import {
   Controller,
   Get,
   Param,
-  Patch,
+  Post,
   Query,
   Res,
   UseGuards,
@@ -52,7 +52,7 @@ export class AnalyticsController {
     return this.queryService.getUnrecognizedInputs(query);
   }
 
-  @Patch('unrecognized-inputs/:id/review')
+  @Post('unrecognized-inputs/:id/review')
   reviewUnrecognizedInput(@Param('id') id: string) {
     return this.queryService.reviewUnrecognizedInput(id);
   }
