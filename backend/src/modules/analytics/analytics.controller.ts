@@ -1,4 +1,12 @@
-import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnalyticsQueryDto } from './analytics-query.dto';
@@ -44,15 +52,22 @@ export class AnalyticsController {
     return this.queryService.getUnrecognizedInputs(query);
   }
 
+  @Patch('unrecognized-inputs/:id/review')
+  reviewUnrecognizedInput(@Param('id') id: string) {
+    return this.queryService.reviewUnrecognizedInput(id);
+  }
+
   @Get('export')
   async export(@Query() query: AnalyticsQueryDto, @Res() response: Response) {
     const csv = await this.queryService.getExport(query);
 
     response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+
     response.setHeader(
       'Content-Disposition',
       'attachment; filename="analytics-export.csv"',
     );
+
     response.send(csv);
   }
 }

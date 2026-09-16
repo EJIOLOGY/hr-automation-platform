@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   AnalyticsEventType,
   MessageDirection,
@@ -50,28 +54,36 @@ export class AnalyticsQueryService {
 
     const [
       totalConversations,
-      activeEmployees,
+      employeeSessions,
       hrEscalations,
       startedEvents,
       completedEvents,
     ] = await Promise.all([
-      this.prisma.chatSession.count({ where: sessionWhere }),
-      this.prisma.employee.count({
+      this.prisma.chatSession.count({
+        where: sessionWhere,
+      }),
+      this.prisma.chatSession.groupBy({
+        by: ['employeeId'],
+        where: sessionWhere,
+      }),
+      this.prisma.escalation.count({
+        where: escalationWhere,
+      }),
+      this.prisma.analyticsEvent.count({
         where: {
-          status: 'ACTIVE',
-          ...(normalized.department
-            ? { department: normalized.department }
-            : {}),
+          ...eventWhere,
+          type: AnalyticsEventType.SESSION_STARTED,
         },
       }),
-      this.prisma.escalation.count({ where: escalationWhere }),
       this.prisma.analyticsEvent.count({
-        where: { ...eventWhere, type: AnalyticsEventType.SESSION_STARTED },
-      }),
-      this.prisma.analyticsEvent.count({
-        where: { ...eventWhere, type: AnalyticsEventType.BOT_COMPLETED },
+        where: {
+          ...eventWhere,
+          type: AnalyticsEventType.BOT_COMPLETED,
+        },
       }),
     ]);
+
+    const activeEmployees = employeeSessions.length;
 
     return {
       totalConversations,
@@ -94,21 +106,28 @@ export class AnalyticsQueryService {
     query: AnalyticsQueryDto,
   ): Promise<ConversationActivity> {
     const normalized = this.normalizeQuery(query);
+
     const [sessions, completedEvents, escalations] = await Promise.all([
       this.prisma.chatSession.findMany({
         where: this.sessionWhere(normalized),
-        select: { startedAt: true },
+        select: {
+          startedAt: true,
+        },
       }),
       this.prisma.analyticsEvent.findMany({
         where: {
           ...this.eventWhere(normalized),
           type: AnalyticsEventType.BOT_COMPLETED,
         },
-        select: { createdAt: true },
+        select: {
+          createdAt: true,
+        },
       }),
       this.prisma.escalation.findMany({
         where: this.escalationWhere(normalized),
-        select: { createdAt: true },
+        select: {
+          createdAt: true,
+        },
       }),
     ]);
 
@@ -137,16 +156,23 @@ export class AnalyticsQueryService {
   getHrServices(query: AnalyticsQueryDto): HrServicesAnalytics {
     this.normalizeQuery(query);
 
-    return { dataAvailable: false, items: [] };
+    return {
+      dataAvailable: false,
+      items: [],
+    };
   }
 
   async getJourney(query: AnalyticsQueryDto): Promise<JourneyAnalytics> {
     const normalized = this.normalizeQuery(query);
+
     const counts = await this.prisma.analyticsEvent.groupBy({
       by: ['type'],
       where: this.eventWhere(normalized),
-      _count: { id: true },
+      _count: {
+        id: true,
+      },
     });
+
     const countByType = new Map(
       counts.map((item) => [item.type, item._count.id]),
     );
@@ -163,13 +189,22 @@ export class AnalyticsQueryService {
   async getEscalations(query: AnalyticsQueryDto): Promise<EscalationAnalytics> {
     const normalized = this.normalizeQuery(query);
     const where = this.escalationWhere(normalized);
+
     const [total, categories] = await Promise.all([
-      this.prisma.escalation.count({ where }),
+      this.prisma.escalation.count({
+        where,
+      }),
       this.prisma.escalation.groupBy({
         by: ['category'],
         where,
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
+        _count: {
+          id: true,
+        },
+        orderBy: {
+          _count: {
+            id: 'desc',
+          },
+        },
       }),
     ]);
 
@@ -186,13 +221,17 @@ export class AnalyticsQueryService {
   getTopPaths(query: AnalyticsQueryDto): TopPathsAnalytics {
     this.normalizeQuery(query);
 
-    return { dataAvailable: false, items: [] };
+    return {
+      dataAvailable: false,
+      items: [],
+    };
   }
 
   async getUnrecognizedInputs(
     query: AnalyticsQueryDto,
   ): Promise<UnrecognizedInputsAnalytics> {
     const normalized = this.normalizeQuery(query);
+
     const events = await this.prisma.analyticsEvent.findMany({
       where: {
         ...this.eventWhere(normalized),
@@ -204,9 +243,15 @@ export class AnalyticsQueryService {
         employeeId: true,
         createdAt: true,
         reviewedAt: true,
-        employee: { select: { department: true } },
+        employee: {
+          select: {
+            department: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
 
     return {
@@ -221,13 +266,40 @@ export class AnalyticsQueryService {
     };
   }
 
+  async reviewUnrecognizedInput(id: string): Promise<void> {
+    const event = await this.prisma.analyticsEvent.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        type: true,
+      },
+    });
+
+    if (!event || event.type !== AnalyticsEventType.UNRECOGNIZED_INPUT) {
+      throw new NotFoundException('Unrecognized input event not found.');
+    }
+
+    await this.prisma.analyticsEvent.update({
+      where: {
+        id,
+      },
+      data: {
+        reviewedAt: new Date(),
+      },
+    });
+  }
+
   async getExport(query: AnalyticsQueryDto): Promise<string> {
     const services = this.getHrServices(query);
+
     const [overview, journey, escalations] = await Promise.all([
       this.getOverview(query),
       this.getJourney(query),
       this.getEscalations(query),
     ]);
+
     const rows: string[][] = [
       ['Section', 'Metric', 'Value'],
       ['Overview', 'Total Conversations', String(overview.totalConversations)],
@@ -282,6 +354,7 @@ export class AnalyticsQueryService {
     const from = query.from
       ? this.parseDateBoundary(query.from, false)
       : undefined;
+
     const toExclusive = query.to
       ? this.parseDateBoundary(query.to, true)
       : undefined;
@@ -292,11 +365,16 @@ export class AnalyticsQueryService {
 
     const department = query.department?.trim();
 
-    return { from, toExclusive, department: department || undefined };
+    return {
+      from,
+      toExclusive,
+      department: department || undefined,
+    };
   }
 
   private parseDateBoundary(value: string, isEnd: boolean): Date {
     const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+
     const date = dateOnly
       ? new Date(`${value}T00:00:00.000Z`)
       : new Date(value);
@@ -305,7 +383,9 @@ export class AnalyticsQueryService {
       throw new BadRequestException('Invalid date filter.');
     }
 
-    if (!isEnd) return date;
+    if (!isEnd) {
+      return date;
+    }
 
     return dateOnly
       ? new Date(date.getTime() + 24 * 60 * 60 * 1000)
@@ -316,9 +396,17 @@ export class AnalyticsQueryService {
     query: NormalizedAnalyticsQuery,
   ): Prisma.ChatSessionWhereInput {
     return {
-      ...(this.dateRange(query) ? { startedAt: this.dateRange(query) } : {}),
+      ...(this.dateRange(query)
+        ? {
+            startedAt: this.dateRange(query),
+          }
+        : {}),
       ...(query.department
-        ? { employee: { department: query.department } }
+        ? {
+            employee: {
+              department: query.department,
+            },
+          }
         : {}),
     };
   }
@@ -327,9 +415,17 @@ export class AnalyticsQueryService {
     query: NormalizedAnalyticsQuery,
   ): Prisma.EscalationWhereInput {
     return {
-      ...(this.dateRange(query) ? { createdAt: this.dateRange(query) } : {}),
+      ...(this.dateRange(query)
+        ? {
+            createdAt: this.dateRange(query),
+          }
+        : {}),
       ...(query.department
-        ? { employee: { department: query.department } }
+        ? {
+            employee: {
+              department: query.department,
+            },
+          }
         : {}),
     };
   }
@@ -338,55 +434,95 @@ export class AnalyticsQueryService {
     query: NormalizedAnalyticsQuery,
   ): Prisma.AnalyticsEventWhereInput {
     return {
-      ...(this.dateRange(query) ? { createdAt: this.dateRange(query) } : {}),
+      ...(this.dateRange(query)
+        ? {
+            createdAt: this.dateRange(query),
+          }
+        : {}),
       ...(query.department
-        ? { employee: { department: query.department } }
+        ? {
+            employee: {
+              department: query.department,
+            },
+          }
         : {}),
     };
   }
 
   private dateRange(query: NormalizedAnalyticsQuery) {
-    if (!query.from && !query.toExclusive) return undefined;
+    if (!query.from && !query.toExclusive) {
+      return undefined;
+    }
 
     return {
-      ...(query.from ? { gte: query.from } : {}),
-      ...(query.toExclusive ? { lt: query.toExclusive } : {}),
+      ...(query.from
+        ? {
+            gte: query.from,
+          }
+        : {}),
+      ...(query.toExclusive
+        ? {
+            lt: query.toExclusive,
+          }
+        : {}),
     };
   }
 
   private async getAverageFirstResponseSeconds(
     sessionWhere: Prisma.ChatSessionWhereInput,
   ): Promise<number | null> {
-    const messages = await this.prisma.chatMessage.findMany({
+    const escalations = await this.prisma.escalation.findMany({
       where: {
         session: sessionWhere,
-        direction: {
-          in: [MessageDirection.INBOUND, MessageDirection.OUTBOUND],
-        },
       },
-      select: { sessionId: true, direction: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
+      select: {
+        sessionId: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
     });
-    const firstInbound = new Map<string, Date>();
-    const responseDurations: number[] = [];
-    const respondedSessions = new Set<string>();
 
-    for (const message of messages) {
-      if (message.direction === MessageDirection.INBOUND) {
-        firstInbound.set(message.sessionId, message.createdAt);
+    if (escalations.length === 0) {
+      return null;
+    }
+
+    const responseDurations: number[] = [];
+
+    for (const escalation of escalations) {
+      const firstHrMessage = await this.prisma.chatMessage.findFirst({
+        where: {
+          sessionId: escalation.sessionId,
+          direction: MessageDirection.OUTBOUND,
+          sentByHrOfficerId: {
+            not: null,
+          },
+          createdAt: {
+            gte: escalation.createdAt,
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+        select: {
+          createdAt: true,
+        },
+      });
+
+      if (!firstHrMessage) {
         continue;
       }
 
-      const inboundAt = firstInbound.get(message.sessionId);
-      if (!inboundAt || respondedSessions.has(message.sessionId)) continue;
-
       responseDurations.push(
-        (message.createdAt.getTime() - inboundAt.getTime()) / 1000,
+        (firstHrMessage.createdAt.getTime() - escalation.createdAt.getTime()) /
+          1000,
       );
-      respondedSessions.add(message.sessionId);
     }
 
-    if (responseDurations.length === 0) return null;
+    if (responseDurations.length === 0) {
+      return null;
+    }
 
     return Number(
       (
@@ -403,17 +539,20 @@ export class AnalyticsQueryService {
     granularity: 'day' | 'week' | 'month',
   ): ConversationActivityPoint[] {
     const points = new Map<string, ConversationActivityPoint>();
+
     const increment = (
       date: Date,
       field: keyof Omit<ConversationActivityPoint, 'label'>,
     ) => {
       const label = this.activityLabel(date, granularity);
+
       const point = points.get(label) ?? {
         label,
         conversations: 0,
         completed: 0,
         escalated: 0,
       };
+
       point[field] += 1;
       points.set(label, point);
     };
@@ -421,7 +560,9 @@ export class AnalyticsQueryService {
     sessions.forEach((session) =>
       increment(session.startedAt, 'conversations'),
     );
+
     completedEvents.forEach((event) => increment(event.createdAt, 'completed'));
+
     escalations.forEach((escalation) =>
       increment(escalation.createdAt, 'escalated'),
     );
@@ -434,24 +575,36 @@ export class AnalyticsQueryService {
   private activityLabel(date: Date, granularity: 'day' | 'week' | 'month') {
     const year = date.getUTCFullYear();
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+
     const day = String(date.getUTCDate()).padStart(2, '0');
 
-    if (granularity === 'month') return `${year}-${month}`;
-    if (granularity === 'day') return `${year}-${month}-${day}`;
+    if (granularity === 'month') {
+      return `${year}-${month}`;
+    }
+
+    if (granularity === 'day') {
+      return `${year}-${month}-${day}`;
+    }
 
     const weekStart = new Date(
       Date.UTC(year, date.getUTCMonth(), date.getUTCDate()),
     );
+
     const offset = (weekStart.getUTCDay() + 6) % 7;
+
     weekStart.setUTCDate(weekStart.getUTCDate() - offset);
+
     return weekStart.toISOString().slice(0, 10);
   }
 
   private averagePerDay(total: number, query: NormalizedAnalyticsQuery) {
-    if (!query.from || !query.toExclusive) return null;
+    if (!query.from || !query.toExclusive) {
+      return null;
+    }
 
     const days =
       (query.toExclusive.getTime() - query.from.getTime()) / 86_400_000;
+
     return days > 0 ? Number((total / days).toFixed(2)) : null;
   }
 

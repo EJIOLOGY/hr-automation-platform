@@ -20,9 +20,14 @@ export interface ConversationActivity {
   monthly: ConversationActivityPoint[];
 }
 
+export interface HrServiceAnalyticsItem {
+  service: string;
+  count: number;
+}
+
 export interface HrServicesAnalytics {
   dataAvailable: boolean;
-  items: never[];
+  items: HrServiceAnalyticsItem[];
 }
 
 export interface JourneyStep {
@@ -46,9 +51,14 @@ export interface EscalationAnalytics {
   categories: EscalationCategoryAnalytics[];
 }
 
+export interface TopPathAnalyticsItem {
+  path: string;
+  count: number;
+}
+
 export interface TopPathsAnalytics {
   dataAvailable: boolean;
-  items: never[];
+  items: TopPathAnalyticsItem[];
 }
 
 export interface UnrecognizedInputItem {
