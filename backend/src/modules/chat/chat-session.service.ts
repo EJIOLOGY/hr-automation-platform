@@ -3,6 +3,10 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
+export interface AnalyticsSession {
+  analyticsSessionCreated?: true;
+}
+
 @Injectable()
 export class ChatSessionService {
   constructor(private readonly prisma: PrismaService) {}
@@ -38,12 +42,14 @@ export class ChatSessionService {
       });
     }
 
-    return this.prisma.chatSession.create({
+    const session = await this.prisma.chatSession.create({
       data: {
         employeeId,
         currentState: initialState,
       },
     });
+
+    return Object.assign(session, { analyticsSessionCreated: true as const });
   }
 
   /**

@@ -7,6 +7,7 @@ export interface EscalationQueueStatus {
   status: EscalationStatus;
   queuePosition: number | null;
   hrBusy: boolean;
+  created?: boolean;
 }
 
 export interface EscalationRequestContext {
@@ -55,7 +56,10 @@ export class EscalationService {
      * startHandling(), preserving the existing single-queue semantics.
      */
     if (existingEscalation) {
-      return this.getQueueStatus(existingEscalation.id);
+      return {
+        ...(await this.getQueueStatus(existingEscalation.id)),
+        created: false,
+      };
     }
 
     /**
@@ -82,7 +86,10 @@ export class EscalationService {
       },
     });
 
-    return this.getQueueStatus(escalation.id);
+    return {
+      ...(await this.getQueueStatus(escalation.id)),
+      created: true,
+    };
   }
 
   private async findReusableActiveEscalation(

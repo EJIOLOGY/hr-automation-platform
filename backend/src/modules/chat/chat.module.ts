@@ -9,6 +9,7 @@ import { EscalationModule } from '../escalation/escalation.module';
 import { HrContentModule } from '../../content/hr-content.module';
 import { LeaveModule } from '../leave/leave.module';
 import { VerificationModule } from '../verification/verification.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { CONVERSATION_PORT } from './conversation.contracts';
 
 @Module({
@@ -20,6 +21,7 @@ import { CONVERSATION_PORT } from './conversation.contracts';
     HrContentModule,
     LeaveModule,
     VerificationModule,
+    AnalyticsModule,
   ],
   providers: [
     ConversationService,

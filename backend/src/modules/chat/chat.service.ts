@@ -9,6 +9,8 @@ import { EscalationService } from '../escalation/escalation.service';
 import { HrContentService } from '../../content/hr-content.service';
 import { LeaveService } from '../leave/leave.service';
 import { HrDocumentRequestService } from '../verification/hr-document-request.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { AnalyticsEventType } from '../../generated/prisma/enums';
 import type {
   ConversationResponse,
   InboundConversationMessage,
@@ -25,6 +27,7 @@ export class ConversationService {
     private readonly hrContentService: HrContentService,
     private readonly leaveService: LeaveService,
     private readonly hrDocumentRequestService: HrDocumentRequestService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   /**
@@ -79,6 +82,14 @@ export class ConversationService {
       'MAIN_MENU',
     );
 
+    if (session.analyticsSessionCreated) {
+      this.recordAnalyticsEvent({
+        type: AnalyticsEventType.SESSION_STARTED,
+        sessionId: session.id,
+        employeeId: employee.id,
+      });
+    }
+
     const previousInboundMessage = await this.prisma.chatMessage.findFirst({
       where: {
         sessionId: session.id,
@@ -102,7 +113,12 @@ export class ConversationService {
     });
 
     if (!previousInboundMessage) {
-      return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
+      return this.createMenuResponse(
+        session.id,
+        MENU_IDS.MAIN,
+        'MAIN_MENU',
+        employee.id,
+      );
     }
 
     const selection = message.trim().toLowerCase();
@@ -155,7 +171,12 @@ export class ConversationService {
           await this.chatSessionService.updateState(session.id, 'MAIN_MENU');
         }
 
-        return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
+        return this.createMenuResponse(
+          session.id,
+          MENU_IDS.MAIN,
+          'MAIN_MENU',
+          employee.id,
+        );
       }
 
       if (parentMenuId) {
@@ -169,6 +190,7 @@ export class ConversationService {
           session.id,
           parentMenuId,
           parentState ?? session.currentState,
+          employee.id,
         );
       }
 
@@ -176,7 +198,12 @@ export class ConversationService {
         await this.chatSessionService.updateState(session.id, 'MAIN_MENU');
       }
 
-      return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
+      return this.createMenuResponse(
+        session.id,
+        MENU_IDS.MAIN,
+        'MAIN_MENU',
+        employee.id,
+      );
     }
 
     /**
@@ -202,7 +229,12 @@ export class ConversationService {
     if (this.isMainMenu(selection)) {
       await this.chatSessionService.updateState(session.id, 'MAIN_MENU');
 
-      return this.createMenuResponse(session.id, MENU_IDS.MAIN, 'MAIN_MENU');
+      return this.createMenuResponse(
+        session.id,
+        MENU_IDS.MAIN,
+        'MAIN_MENU',
+        employee.id,
+      );
     }
 
     /**
@@ -210,19 +242,45 @@ export class ConversationService {
      */
     switch (session.currentState) {
       case 'MAIN_MENU':
-        return this.handleMainMenuSelection(session.id, selection);
+        return this.handleMainMenuSelection(
+          employee.id,
+          session.id,
+          selection,
+          message,
+        );
 
       case 'POLICY_MENU':
-        return this.handlePolicySelection(session.id, selection);
+        return this.handlePolicySelection(
+          employee.id,
+          session.id,
+          selection,
+          message,
+        );
 
       case 'LEAVE_MENU':
-        return this.handleLeaveSelection(session.id, selection, phoneNumber);
+        return this.handleLeaveSelection(
+          employee.id,
+          session.id,
+          selection,
+          message,
+          phoneNumber,
+        );
 
       case 'BENEFITS_MENU':
-        return this.handleBenefitsSelection(session.id, selection);
+        return this.handleBenefitsSelection(
+          employee.id,
+          session.id,
+          selection,
+          message,
+        );
 
       case 'VERIFICATION_MENU':
-        return this.handleVerificationSelection(session.id, selection);
+        return this.handleVerificationSelection(
+          employee.id,
+          session.id,
+          selection,
+          message,
+        );
 
       case 'DOCUMENT_REQUEST_MENU':
         return this.handleDocumentRequestSelection(
@@ -230,6 +288,7 @@ export class ConversationService {
           session.id,
           session.currentState,
           selection,
+          message,
         );
 
       default:
@@ -250,8 +309,10 @@ export class ConversationService {
    * menu configuration.
    */
   private async handleMainMenuSelection(
+    employeeId: string,
     sessionId: string,
     selection: string,
+    rawInput: string,
   ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
       MENU_IDS.MAIN,
@@ -259,8 +320,25 @@ export class ConversationService {
     );
 
     if (!menuSelection) {
-      return this.handleUnknownSelection(sessionId, 'MAIN_MENU', MENU_IDS.MAIN);
+      return this.handleUnknownSelection(
+        employeeId,
+        sessionId,
+        'MAIN_MENU',
+        rawInput,
+        MENU_IDS.MAIN,
+      );
     }
+
+    this.recordAnalyticsEvent({
+      type: AnalyticsEventType.SERVICE_SELECTED,
+      sessionId,
+      employeeId,
+      metadata: {
+        menuId: MENU_IDS.MAIN,
+        selectionId: menuSelection.id,
+        action: menuSelection.action,
+      },
+    });
 
     switch (menuSelection.action) {
       case 'open_policy_faq':
@@ -293,8 +371,10 @@ export class ConversationService {
 
       default:
         return this.handleUnknownSelection(
+          employeeId,
           sessionId,
           'MAIN_MENU',
+          rawInput,
           MENU_IDS.MAIN,
         );
     }
@@ -307,8 +387,10 @@ export class ConversationService {
    * Policy module in its own integration step.
    */
   private async handlePolicySelection(
+    employeeId: string,
     sessionId: string,
     selection: string,
+    rawInput: string,
   ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
       MENU_IDS.POLICY,
@@ -317,8 +399,10 @@ export class ConversationService {
 
     if (!menuSelection) {
       return this.handleUnknownSelection(
+        employeeId,
         sessionId,
         'POLICY_MENU',
+        rawInput,
         MENU_IDS.POLICY,
       );
     }
@@ -328,6 +412,12 @@ export class ConversationService {
     if (!content) {
       return this.createResponse(sessionId, 'POLICY_MENU', 'content_not_found');
     }
+
+    this.recordInformationProvided(employeeId, sessionId, 'POLICY_MENU', {
+      menuId: MENU_IDS.POLICY,
+      selectionId: menuSelection.id,
+      action: menuSelection.action,
+    });
 
     return {
       success: true,
@@ -353,8 +443,10 @@ export class ConversationService {
    * the conversation layer independent of the spreadsheet adapter.
    */
   private async handleLeaveSelection(
+    employeeId: string,
     sessionId: string,
     selection: string,
+    rawInput: string,
     phoneNumber: string,
   ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
@@ -364,14 +456,16 @@ export class ConversationService {
 
     if (!menuSelection) {
       return this.handleUnknownSelection(
+        employeeId,
         sessionId,
         'LEAVE_MENU',
+        rawInput,
         MENU_IDS.LEAVE,
       );
     }
 
     if (menuSelection.action === 'open_leave_balance') {
-      return this.handleLeaveBalanceSelection(sessionId, phoneNumber);
+      return this.handleLeaveBalanceSelection(employeeId, sessionId, phoneNumber);
     }
 
     if (
@@ -388,6 +482,12 @@ export class ConversationService {
           'content_not_found',
         );
       }
+
+      this.recordInformationProvided(employeeId, sessionId, 'LEAVE_MENU', {
+        menuId: MENU_IDS.LEAVE,
+        selectionId: menuSelection.id,
+        action: menuSelection.action,
+      });
 
       return {
         success: true,
@@ -409,6 +509,7 @@ export class ConversationService {
   }
 
   private async handleLeaveBalanceSelection(
+    employeeId: string,
     sessionId: string,
     phoneNumber: string,
   ): Promise<ConversationResponse> {
@@ -416,6 +517,11 @@ export class ConversationService {
 
     switch (result.status) {
       case 'available':
+        this.recordInformationProvided(employeeId, sessionId, 'LEAVE_MENU', {
+          menuId: MENU_IDS.LEAVE,
+          selectionId: MENU_SELECTION_IDS.LEAVE_BALANCE,
+          action: 'open_leave_balance',
+        });
         return {
           success: true,
           sessionId,
@@ -456,8 +562,10 @@ export class ConversationService {
    * Benefits state.
    */
   private async handleBenefitsSelection(
+    employeeId: string,
     sessionId: string,
     selection: string,
+    rawInput: string,
   ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
       MENU_IDS.BENEFITS,
@@ -466,8 +574,10 @@ export class ConversationService {
 
     if (!menuSelection) {
       return this.handleUnknownSelection(
+        employeeId,
         sessionId,
         'BENEFITS_MENU',
+        rawInput,
         MENU_IDS.BENEFITS,
       );
     }
@@ -481,6 +591,12 @@ export class ConversationService {
         'content_not_found',
       );
     }
+
+    this.recordInformationProvided(employeeId, sessionId, 'BENEFITS_MENU', {
+      menuId: MENU_IDS.BENEFITS,
+      selectionId: menuSelection.id,
+      action: menuSelection.action,
+    });
 
     return {
       success: true,
@@ -502,8 +618,10 @@ export class ConversationService {
    * Employment verification state.
    */
   private async handleVerificationSelection(
+    employeeId: string,
     sessionId: string,
     selection: string,
+    rawInput: string,
   ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
       MENU_IDS.VERIFICATION,
@@ -512,8 +630,10 @@ export class ConversationService {
 
     if (!menuSelection) {
       return this.handleUnknownSelection(
+        employeeId,
         sessionId,
         'VERIFICATION_MENU',
+        rawInput,
         MENU_IDS.VERIFICATION,
       );
     }
@@ -545,6 +665,7 @@ export class ConversationService {
     sessionId: string,
     currentState: string,
     selection: string,
+    rawInput: string,
   ): Promise<ConversationResponse> {
     const menuSelection = this.menuReplyBuilder.getSelection(
       MENU_IDS.DOCUMENT_REQUEST,
@@ -553,8 +674,10 @@ export class ConversationService {
 
     if (!menuSelection) {
       return this.handleUnknownSelection(
+        employeeId,
         sessionId,
         'DOCUMENT_REQUEST_MENU',
+        rawInput,
         MENU_IDS.DOCUMENT_REQUEST,
       );
     }
@@ -566,8 +689,10 @@ export class ConversationService {
 
       if (!request) {
         return this.handleUnknownSelection(
+          employeeId,
           sessionId,
           'DOCUMENT_REQUEST_MENU',
+          rawInput,
           MENU_IDS.DOCUMENT_REQUEST,
         );
       }
@@ -673,11 +798,24 @@ export class ConversationService {
    * as natural-language intent.
    */
   private async handleUnknownSelection(
+    employeeId: string,
     sessionId: string,
     currentState: string,
+    rawInput: string,
     menuId?: string,
   ): Promise<ConversationResponse> {
     await this.chatSessionService.touch(sessionId);
+
+    this.recordAnalyticsEvent({
+      type: AnalyticsEventType.UNRECOGNIZED_INPUT,
+      sessionId,
+      employeeId,
+      metadata: {
+        currentState,
+        menuId: menuId ?? null,
+        rawInput,
+      },
+    });
 
     const response = {
       success: true,
@@ -699,6 +837,10 @@ export class ConversationService {
       const menu = this.menuReplyBuilder.buildMenuReply(menuId);
 
       if (menu) {
+        if (menuId === MENU_IDS.MAIN) {
+          this.recordMainMenuViewed(employeeId, sessionId);
+        }
+
         return {
           ...response,
           menu,
@@ -748,6 +890,7 @@ export class ConversationService {
     sessionId: string,
     menuId: string,
     state: string,
+    employeeId?: string,
   ): ConversationResponse {
     const menu = this.menuReplyBuilder.buildMenuReply(menuId);
 
@@ -761,6 +904,10 @@ export class ConversationService {
           { type: 'text', text: 'Menu configuration could not be loaded.' },
         ],
       };
+    }
+
+    if (menuId === MENU_IDS.MAIN && employeeId) {
+      this.recordMainMenuViewed(employeeId, sessionId);
     }
 
     return {
@@ -867,6 +1014,19 @@ export class ConversationService {
         content: `ESCALATION:${reason}:QUEUE_POSITION:${queueStatus.queuePosition ?? 'IN_PROGRESS'}`,
       },
     });
+
+    if (queueStatus.created) {
+      this.recordAnalyticsEvent({
+        type: AnalyticsEventType.ESCALATION_CREATED,
+        sessionId,
+        employeeId,
+        escalationId: queueStatus.escalationId,
+        metadata: {
+          category: context?.category ?? null,
+          documentType: context?.documentType ?? null,
+        },
+      });
+    }
 
     /**
      * This means the employee's escalation has already
