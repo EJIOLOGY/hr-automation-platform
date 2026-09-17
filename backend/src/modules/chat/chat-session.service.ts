@@ -1,17 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { ChatSession } from '../../generated/prisma/client';
 
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
-export interface AnalyticsSession {
+export type ChatSessionWithAnalyticsFlag = ChatSession & {
   analyticsSessionCreated?: true;
-}
+};
 
 @Injectable()
 export class ChatSessionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getOrCreateSession(employeeId: string, initialState: string) {
+  async getOrCreateSession(
+    employeeId: string,
+    initialState: string,
+  ): Promise<ChatSessionWithAnalyticsFlag> {
     const existingSession = await this.prisma.chatSession.findFirst({
       where: {
         employeeId,
@@ -49,7 +53,9 @@ export class ChatSessionService {
       },
     });
 
-    return Object.assign(session, { analyticsSessionCreated: true as const });
+    return Object.assign(session, {
+      analyticsSessionCreated: true as const,
+    });
   }
 
   /**

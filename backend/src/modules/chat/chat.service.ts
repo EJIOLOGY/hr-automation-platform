@@ -10,7 +10,7 @@ import { HrContentService } from '../../content/hr-content.service';
 import { LeaveService } from '../leave/leave.service';
 import { HrDocumentRequestService } from '../verification/hr-document-request.service';
 import { AnalyticsService } from '../analytics/analytics.service';
-import { AnalyticsEventType } from '../../generated/prisma/enums';
+import { AnalyticsEventType, Prisma } from '../../generated/prisma/client';
 import type {
   ConversationResponse,
   InboundConversationMessage,
@@ -526,6 +526,7 @@ export class ConversationService {
           selectionId: MENU_SELECTION_IDS.LEAVE_BALANCE,
           action: 'open_leave_balance',
         });
+
         return {
           success: true,
           sessionId,
@@ -857,7 +858,7 @@ export class ConversationService {
   }
 
   /**
-   * Persists a conversation state transition.
+   * Persists a state transition.
    */
   private async transitionAndRespond(
     sessionId: string,
@@ -1119,6 +1120,51 @@ export class ConversationService {
         },
       ],
     };
+  }
+
+  /**
+   * Records a generic analytics event without making analytics
+   * persistence part of the conversation response path.
+   */
+  private recordAnalyticsEvent(input: {
+    type: AnalyticsEventType;
+    sessionId: string;
+    employeeId?: string;
+    escalationId?: string;
+    metadata?: Prisma.InputJsonObject;
+  }): void {
+    void this.analyticsService.recordEvent(input);
+  }
+
+  /**
+   * Records that the main menu was presented to the employee.
+   */
+  private recordMainMenuViewed(employeeId: string, sessionId: string): void {
+    this.recordAnalyticsEvent({
+      type: AnalyticsEventType.MAIN_MENU_VIEWED,
+      sessionId,
+      employeeId,
+    });
+  }
+
+  /**
+   * Records that information was provided from a submenu.
+   */
+  private recordInformationProvided(
+    employeeId: string,
+    sessionId: string,
+    currentState: string,
+    metadata: Record<string, unknown>,
+  ): void {
+    this.recordAnalyticsEvent({
+      type: AnalyticsEventType.INFORMATION_PROVIDED,
+      sessionId,
+      employeeId,
+      metadata: {
+        currentState,
+        ...metadata,
+      },
+    });
   }
 
   /* Backward-compatible aliases for Talk to HR. */
