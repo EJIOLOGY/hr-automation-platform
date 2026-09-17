@@ -108,4 +108,34 @@ describe('ChatSessionService', () => {
       },
     });
   });
+
+  it('does not emit BOT_COMPLETED or touch analytics when a session expires due to inactivity timeout', async () => {
+    const expiredSession = {
+      id: 'session-timeout-1',
+      employeeId: 'employee-1',
+      currentState: 'LEAVE_MENU',
+      isActive: true,
+      lastActivityAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+    };
+
+    const newSession = {
+      id: 'session-timeout-2',
+      employeeId: 'employee-1',
+      currentState: 'MAIN_MENU',
+      isActive: true,
+    };
+
+    prisma.chatSession.findFirst.mockResolvedValue(expiredSession);
+    prisma.chatSession.update.mockResolvedValue({
+      ...expiredSession,
+      isActive: false,
+    });
+    prisma.chatSession.create.mockResolvedValue(newSession);
+
+    const result = await service.getOrCreateSession('employee-1', 'MAIN_MENU');
+
+    expect(result.id).toBe('session-timeout-2');
+    // ChatSessionService only closes the session and marks analyticsSessionCreated for the new session
+    expect(result.analyticsSessionCreated).toBe(true);
+  });
 });

@@ -221,6 +221,33 @@ export class ConversationService {
     }
 
     /**
+     * Deterministic self-service completion contract:
+     * When an employee has received a terminal self-service answer/lookup result
+     * and chooses "Return to Main Menu" or "End Conversation".
+     */
+    if (this.isEndConversationAction(selection)) {
+      const completionResult = await this.handleEndConversation(
+        employee.id,
+        session.id,
+      );
+
+      if (completionResult) {
+        return completionResult;
+      }
+    }
+
+    if (this.isReturnToMainMenuAction(selection)) {
+      const returnResult = await this.handleReturnToMainMenu(
+        employee.id,
+        session.id,
+      );
+
+      if (returnResult) {
+        return returnResult;
+      }
+    }
+
+    /**
      * Global main-menu navigation.
      *
      * This remains available while the employee is waiting
@@ -1249,5 +1276,145 @@ export class ConversationService {
    */
   private isMainMenu(selection: string): boolean {
     return ['main-menu', 'menu'].includes(selection);
+  }
+
+  /**
+   * Recognizes explicit actions to return to the main menu from completion prompt.
+   */
+  private isReturnToMainMenuAction(selection: string): boolean {
+    return [
+      '1',
+      'return to main menu',
+      'return_to_main_menu',
+      'main menu',
+    ].includes(selection);
+  }
+
+  /**
+   * Recognizes explicit actions to end the conversation.
+   */
+  private isEndConversationAction(selection: string): boolean {
+    return [
+      '2',
+      'end conversation',
+      'end_conversation',
+      'end',
+      'finish',
+      'done',
+    ].includes(selection);
+  }
+
+  /**
+   * Handles explicit return to main menu after receiving self-service resolution.
+   * Returns null if session was not in a post-answer state.
+   */
+  private async handleReturnToMainMenu(
+    employeeId: string,
+    sessionId: string,
+  ): Promise<ConversationResponse | null> {
+    const hasValidSelfServiceAnswer =
+      await this.hasValidSelfServiceAnswer(sessionId);
+
+    if (!hasValidSelfServiceAnswer) {
+      return null;
+    }
+
+    await this.chatSessionService.updateState(sessionId, 'MAIN_MENU');
+
+    return this.createMenuResponse(
+      sessionId,
+      MENU_IDS.MAIN,
+      'MAIN_MENU',
+      employeeId,
+    );
+  }
+
+  /**
+   * Handles explicit ending of conversation after receiving self-service resolution.
+   * Emits exactly one BOT_COMPLETED event and ends the session.
+   * Returns null if session did not meet genuine completion criteria.
+   */
+  private async handleEndConversation(
+    employeeId: string,
+    sessionId: string,
+  ): Promise<ConversationResponse | null> {
+    const hasValidSelfServiceAnswer =
+      await this.hasValidSelfServiceAnswer(sessionId);
+
+    if (!hasValidSelfServiceAnswer) {
+      return null;
+    }
+
+    // Must not be an escalated session
+    const hasEscalation = await this.prisma.escalation.findFirst({
+      where: { sessionId },
+      select: { id: true },
+    });
+
+    if (hasEscalation) {
+      return null;
+    }
+
+    // End the session lifecycle
+    await this.chatSessionService.endSession(sessionId);
+
+    // Prevent duplicate BOT_COMPLETED events
+    const alreadyRecorded = await this.prisma.analyticsEvent.findFirst({
+      where: {
+        sessionId,
+        type: AnalyticsEventType.BOT_COMPLETED,
+      },
+      select: { id: true },
+    });
+
+    if (!alreadyRecorded) {
+      this.recordAnalyticsEvent({
+        type: AnalyticsEventType.BOT_COMPLETED,
+        sessionId,
+        employeeId,
+      });
+    }
+
+    const replyText =
+      'Thank you for using HR Services. Your conversation has ended. Have a great day!';
+
+    await this.prisma.chatMessage.create({
+      data: {
+        sessionId,
+        direction: MessageDirection.OUTBOUND,
+        messageType: MessageType.TEXT,
+        content: replyText,
+      },
+    });
+
+    return {
+      success: true,
+      sessionId,
+      state: 'MAIN_MENU',
+      action: 'end_conversation',
+      message: replyText,
+      replies: [
+        {
+          type: 'text',
+          text: replyText,
+        },
+      ],
+      escalationAvailable: false,
+    };
+  }
+
+  /**
+   * Checks whether the session has received a valid self-service answer/lookup result.
+   */
+  private async hasValidSelfServiceAnswer(sessionId: string): Promise<boolean> {
+    const infoEvent = await this.prisma.analyticsEvent.findFirst({
+      where: {
+        sessionId,
+        type: AnalyticsEventType.INFORMATION_PROVIDED,
+      },
+      select: { id: true },
+    });
+
+    return Boolean(infoEvent);
   }
 }
