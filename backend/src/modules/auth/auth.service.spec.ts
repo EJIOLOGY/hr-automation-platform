@@ -109,7 +109,9 @@ describe('AuthService', () => {
       const [recipient, resetUrl] =
         mailerServiceMock.sendPasswordResetEmail.mock.calls[0];
       expect(recipient).toBe('officer@example.com');
-      expect(resetUrl).toContain('https://dashboard.example.com/reset-password?token=');
+      expect(resetUrl).toContain(
+        'https://dashboard.example.com/reset-password?token=',
+      );
 
       // Verify the resetUrl contains raw token whose SHA-256 matches stored hash
       const tokenInUrl = new URL(resetUrl).searchParams.get('token');
@@ -243,7 +245,9 @@ describe('AuthService', () => {
           token: 'expired-token',
           newPassword: 'NewSecurePassword123!',
         }),
-      ).rejects.toThrow(new BadRequestException('Invalid or expired password reset token.'));
+      ).rejects.toThrow(
+        new BadRequestException('Invalid or expired password reset token.'),
+      );
     });
 
     it('ensures single-use behavior because token hash is set to null after reset', async () => {

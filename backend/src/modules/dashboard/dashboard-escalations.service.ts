@@ -4,10 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+
 import { EscalationStatus } from '../../generated/prisma/enums';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EscalationService } from '../escalation/escalation.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
+import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 50;
@@ -38,6 +42,8 @@ export class DashboardEscalationsService {
     private readonly prisma: PrismaService,
     private readonly escalationService: EscalationService,
     private readonly auditService: AuditService,
+    private readonly whatsappGraphClient: WhatsappGraphClient,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async list(query: EscalationListQuery) {
@@ -248,39 +254,81 @@ export class DashboardEscalationsService {
     }
 
     const resolutionNote = this.normalizeResolutionNote(input.resolutionNote);
+
+    const employeeMessage = this.buildResolutionMessage(
+      escalation.employee.fullName,
+    );
+
+    await this.sendEmployeeNotification(
+      escalation.employee.phoneNumber,
+      employeeMessage,
+    );
+
     const resolved = await this.escalationService.resolveEscalation(id);
 
-    const updated = await this.prisma.escalation.update({
-      where: { id },
-      data: {
-        resolutionNote: resolutionNote ?? undefined,
-        assignedHrOfficerId:
-          escalation.assignedHrOfficerId ?? input.hrOfficerId,
-      },
-      include: {
-        employee: {
-          select: {
-            id: true,
-            employeeNumber: true,
-            fullName: true,
-            phoneNumber: true,
-            department: true,
-            jobTitle: true,
-            status: true,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedEscalation = await tx.escalation.update({
+        where: { id },
+        data: {
+          resolutionNote: resolutionNote ?? undefined,
+          assignedHrOfficerId:
+            escalation.assignedHrOfficerId ?? input.hrOfficerId,
+        },
+        include: {
+          employee: {
+            select: {
+              id: true,
+              employeeNumber: true,
+              fullName: true,
+              phoneNumber: true,
+              department: true,
+              jobTitle: true,
+              status: true,
+            },
+          },
+          assignedHrOfficer: {
+            select: { id: true, fullName: true, email: true, role: true },
+          },
+          session: {
+            select: {
+              id: true,
+              currentState: true,
+              isActive: true,
+              lastActivityAt: true,
+            },
           },
         },
-        assignedHrOfficer: {
-          select: { id: true, fullName: true, email: true, role: true },
+      });
+
+      await tx.chatMessage.create({
+        data: {
+          sessionId: escalation.session.id,
+          direction: 'OUTBOUND',
+          messageType: 'TEXT',
+          content: employeeMessage,
         },
-        session: {
-          select: {
-            id: true,
-            currentState: true,
-            isActive: true,
-            lastActivityAt: true,
-          },
+      });
+
+      await tx.chatMessage.create({
+        data: {
+          sessionId: escalation.session.id,
+          direction: 'OUTBOUND',
+          messageType: 'SYSTEM',
+          content: 'STATE_TRANSITION:HR_QUEUE->MAIN_MENU',
         },
-      },
+      });
+
+      await tx.chatSession.update({
+        where: {
+          id: escalation.session.id,
+        },
+        data: {
+          currentState: 'MAIN_MENU',
+          lastActivityAt: new Date(),
+        },
+      });
+
+      return updatedEscalation;
     });
 
     await this.auditService.log({
@@ -295,6 +343,8 @@ export class DashboardEscalationsService {
         resolvedAt: resolved.resolvedAt?.toISOString() ?? null,
       },
     });
+
+    this.realtimeGateway.notifyNewMessage(escalation.session.id, 'OUTBOUND');
 
     return updated;
   }
@@ -321,39 +371,81 @@ export class DashboardEscalationsService {
     }
 
     const resolutionNote = this.normalizeResolutionNote(input.resolutionNote);
+
+    const employeeMessage = this.buildClosureMessage(
+      escalation.employee.fullName,
+    );
+
+    await this.sendEmployeeNotification(
+      escalation.employee.phoneNumber,
+      employeeMessage,
+    );
+
     await this.escalationService.closeEscalation(id);
 
-    const updated = await this.prisma.escalation.update({
-      where: { id },
-      data: {
-        resolutionNote: resolutionNote ?? undefined,
-        assignedHrOfficerId:
-          escalation.assignedHrOfficerId ?? input.hrOfficerId,
-      },
-      include: {
-        employee: {
-          select: {
-            id: true,
-            employeeNumber: true,
-            fullName: true,
-            phoneNumber: true,
-            department: true,
-            jobTitle: true,
-            status: true,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedEscalation = await tx.escalation.update({
+        where: { id },
+        data: {
+          resolutionNote: resolutionNote ?? undefined,
+          assignedHrOfficerId:
+            escalation.assignedHrOfficerId ?? input.hrOfficerId,
+        },
+        include: {
+          employee: {
+            select: {
+              id: true,
+              employeeNumber: true,
+              fullName: true,
+              phoneNumber: true,
+              department: true,
+              jobTitle: true,
+              status: true,
+            },
+          },
+          assignedHrOfficer: {
+            select: { id: true, fullName: true, email: true, role: true },
+          },
+          session: {
+            select: {
+              id: true,
+              currentState: true,
+              isActive: true,
+              lastActivityAt: true,
+            },
           },
         },
-        assignedHrOfficer: {
-          select: { id: true, fullName: true, email: true, role: true },
+      });
+
+      await tx.chatMessage.create({
+        data: {
+          sessionId: escalation.session.id,
+          direction: 'OUTBOUND',
+          messageType: 'TEXT',
+          content: employeeMessage,
         },
-        session: {
-          select: {
-            id: true,
-            currentState: true,
-            isActive: true,
-            lastActivityAt: true,
-          },
+      });
+
+      await tx.chatMessage.create({
+        data: {
+          sessionId: escalation.session.id,
+          direction: 'OUTBOUND',
+          messageType: 'SYSTEM',
+          content: 'STATE_TRANSITION:HR_QUEUE->MAIN_MENU',
         },
-      },
+      });
+
+      await tx.chatSession.update({
+        where: {
+          id: escalation.session.id,
+        },
+        data: {
+          currentState: 'MAIN_MENU',
+          lastActivityAt: new Date(),
+        },
+      });
+
+      return updatedEscalation;
     });
 
     await this.auditService.log({
@@ -368,24 +460,63 @@ export class DashboardEscalationsService {
       },
     });
 
+    this.realtimeGateway.notifyNewMessage(escalation.session.id, 'OUTBOUND');
+
     return updated;
+  }
+
+  private async sendEmployeeNotification(
+    phoneNumber: string,
+    message: string,
+  ): Promise<void> {
+    const recipient = PhoneNumberNormalizer.normalize(phoneNumber).replace(
+      /^\+/,
+      '',
+    );
+
+    const sent = await this.whatsappGraphClient.sendMessage(recipient, {
+      type: 'text',
+      text: message,
+    });
+
+    if (!sent) {
+      throw new BadRequestException(
+        'Unable to notify the employee on WhatsApp. The escalation was not completed. Please try again.',
+      );
+    }
+  }
+
+  private buildResolutionMessage(fullName: string): string {
+    const firstName = fullName.trim().split(/\s+/)[0] || 'there';
+
+    return `Hi ${firstName}, your HR request has been resolved. Thank you for contacting HR.\n\nYou have been returned to the main menu.`;
+  }
+
+  private buildClosureMessage(fullName: string): string {
+    const firstName = fullName.trim().split(/\s+/)[0] || 'there';
+
+    return `Hi ${firstName}, your HR request has been closed. Thank you for contacting HR.\n\nYou have been returned to the main menu.`;
   }
 
   private normalizeLimit(value?: number) {
     if (value === undefined) return DEFAULT_LIMIT;
+
     if (!Number.isInteger(value) || value < 1) {
       throw new BadRequestException('limit must be a positive integer.');
     }
+
     return Math.min(value, MAX_LIMIT);
   }
 
   private normalizeResolutionNote(value?: string) {
     const note = value?.trim();
+
     if (note && note.length > 2000) {
       throw new BadRequestException(
         'resolutionNote must not exceed 2000 characters.',
       );
     }
+
     return note || undefined;
   }
 
@@ -398,6 +529,7 @@ export class DashboardEscalationsService {
       const decoded = JSON.parse(
         Buffer.from(value, 'base64url').toString('utf8'),
       ) as Partial<EscalationCursor>;
+
       if (
         typeof decoded.id !== 'string' ||
         typeof decoded.createdAt !== 'string' ||
@@ -405,7 +537,11 @@ export class DashboardEscalationsService {
       ) {
         throw new Error('Invalid cursor');
       }
-      return { id: decoded.id, createdAt: decoded.createdAt };
+
+      return {
+        id: decoded.id,
+        createdAt: decoded.createdAt,
+      };
     } catch {
       throw new BadRequestException('Invalid cursor.');
     }

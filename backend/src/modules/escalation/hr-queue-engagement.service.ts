@@ -4,10 +4,6 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { AxiosError } from 'axios';
-import { firstValueFrom } from 'rxjs';
 
 import { PrismaService } from '../../core/prisma/prisma.service';
 import {
@@ -15,7 +11,7 @@ import {
   MessageDirection,
   MessageType,
 } from '../../generated/prisma/enums';
-import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
+import { WhatsappGraphClient } from '../whatsapp/whatsapp-graph-client.service';
 
 export const QUEUE_ENGAGEMENT_PREFIX = 'HR_QUEUE_ENGAGEMENT:';
 
@@ -31,8 +27,7 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
+    private readonly whatsappGraphClient: WhatsappGraphClient,
   ) {}
 
   onModuleInit(): void {
@@ -251,73 +246,20 @@ export class HrQueueEngagementService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Sends a plain WhatsApp text message directly through Meta Graph API.
+   * Sends the employee-facing message through the shared WhatsApp
+   * Graph client so all outbound Meta delivery uses one implementation.
    *
-   * We deliberately keep this service independent of WhatsappModule to
-   * avoid creating a module dependency cycle between escalation and
-   * WhatsApp/conversation modules.
+   * The message is persisted by the caller only after successful delivery.
    */
   private async sendWhatsAppMessage(
     phoneNumber: string,
     message: string,
   ): Promise<boolean> {
-    const accessToken = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
+    const recipient = phoneNumber.replace(/^\+/, '');
 
-    const phoneNumberId = this.configService.get<string>(
-      'WHATSAPP_PHONE_NUMBER_ID',
-    );
-
-    const apiVersion =
-      this.configService.get<string>('WHATSAPP_GRAPH_API_VERSION') ?? 'v21.0';
-
-    if (!accessToken || !phoneNumberId) {
-      this.logger.error(
-        'Cannot send queue engagement message: WhatsApp credentials are not configured.',
-      );
-
-      return false;
-    }
-
-    const recipient = PhoneNumberNormalizer.normalize(phoneNumber).replace(
-      /^\+/,
-      '',
-    );
-
-    const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
-
-    try {
-      await firstValueFrom(
-        this.httpService.post(
-          url,
-          {
-            messaging_product: 'whatsapp',
-            to: recipient,
-            type: 'text',
-            text: {
-              body: message,
-            },
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-          },
-        ),
-      );
-
-      return true;
-    } catch (error) {
-      const details =
-        error instanceof AxiosError
-          ? JSON.stringify(error.response?.data ?? error.message)
-          : String(error);
-
-      this.logger.error(
-        `Failed to send queue engagement WhatsApp message to ${recipient}: ${details}`,
-      );
-
-      return false;
-    }
+    return this.whatsappGraphClient.sendMessage(recipient, {
+      type: 'text',
+      text: message,
+    });
   }
 }

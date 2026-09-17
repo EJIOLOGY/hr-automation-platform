@@ -275,9 +275,7 @@ export class AuthService {
         .createHash('sha256')
         .update(rawToken)
         .digest('hex');
-      const passwordResetTokenExpiresAt = new Date(
-        Date.now() + 60 * 60 * 1000,
-      );
+      const passwordResetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
       await this.prisma.hrOfficer.update({
         where: { id: officer.id },
@@ -364,4 +362,3 @@ export class AuthService {
     };
   }
 }
-

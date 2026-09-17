@@ -115,6 +115,7 @@ model ChatSession {
 
   messages    ChatMessage[]
   escalations Escalation[]
+  feedbacks   Feedback[]
   analyticsEvents AnalyticsEvent[]
 
   createdAt DateTime @default(now())
@@ -172,6 +173,7 @@ model Escalation {
 
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
+  feedback   Feedback?
   analyticsEvents AnalyticsEvent[]
 
   @@index([status])
@@ -229,5 +231,19 @@ model AnalyticsEvent {
   @@index([sessionId])
   @@index([employeeId])
   @@index([escalationId])
+  @@index([createdAt])
+}
+
+model Feedback {
+  id           String      @id @default(uuid())
+  escalationId String      @unique
+  escalation   Escalation  @relation(fields: [escalationId], references: [id], onDelete: Cascade)
+  sessionId    String
+  session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  rating       Int
+  comment      String?
+  createdAt    DateTime    @default(now())
+
+  @@index([sessionId])
   @@index([createdAt])
 }
