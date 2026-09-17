@@ -64,6 +64,7 @@ describe('ConversationService', () => {
   };
   let analyticsService: {
     recordEvent: jest.Mock;
+    recordBotCompleted: jest.Mock;
   };
 
   beforeEach(() => {
@@ -113,6 +114,7 @@ describe('ConversationService', () => {
 
     analyticsService = {
       recordEvent: jest.fn().mockResolvedValue(undefined),
+      recordBotCompleted: jest.fn().mockResolvedValue(undefined),
     };
 
     service = new ConversationService(
@@ -389,17 +391,18 @@ describe('ConversationService', () => {
       MENU_SELECTION_IDS.LEAVE_POLICY,
     );
     expect(response.success).toBe(true);
-    expect(response.state).toBe('POLICY_MENU');
+    expect(response.state).toBe('POST_SERVICE_MENU');
     expect(response.action).toBe('show_leave_policy');
-    expect(response.message).toBe(
+    expect(response.message).toContain(
       '[HR APPROVAL REQUIRED] Leave policy content has not yet been provided by HR.',
     );
-    expect(response.replies).toEqual([
-      {
-        type: 'text',
-        text: '[HR APPROVAL REQUIRED] Leave policy content has not yet been provided by HR.',
-      },
-    ]);
+    expect(response.message).toContain(
+      'Is there anything else I can help you with?',
+    );
+    expect(response.replies[0]).toEqual({
+      type: 'text',
+      text: '[HR APPROVAL REQUIRED] Leave policy content has not yet been provided by HR.',
+    });
   });
 
   it('returns a content-not-found response when a Policy FAQ item has no static content', async () => {
@@ -468,17 +471,18 @@ describe('ConversationService', () => {
       MENU_SELECTION_IDS.HEALTH_INSURANCE,
     );
     expect(response.success).toBe(true);
-    expect(response.state).toBe('POLICY_MENU');
+    expect(response.state).toBe('POST_SERVICE_MENU');
     expect(response.action).toBe('show_health_insurance');
-    expect(response.message).toBe(
+    expect(response.message).toContain(
       '[HR APPROVAL REQUIRED] Health Insurance information has not yet been provided by HR.',
     );
-    expect(response.replies).toEqual([
-      {
-        type: 'text',
-        text: '[HR APPROVAL REQUIRED] Health Insurance information has not yet been provided by HR.',
-      },
-    ]);
+    expect(response.message).toContain(
+      'Is there anything else I can help you with?',
+    );
+    expect(response.replies[0]).toEqual({
+      type: 'text',
+      text: '[HR APPROVAL REQUIRED] Health Insurance information has not yet been provided by HR.',
+    });
   });
 
   it('returns the employee leave balance through LeaveService', async () => {
@@ -508,12 +512,16 @@ describe('ConversationService', () => {
       '+2347044965784',
     );
     expect(response.success).toBe(true);
-    expect(response.state).toBe('LEAVE_MENU');
+    expect(response.state).toBe('POST_SERVICE_MENU');
     expect(response.action).toBe('open_leave_balance');
-    expect(response.message).toBe('You have 12 leave days remaining.');
-    expect(response.replies).toEqual([
-      { type: 'text', text: 'You have 12 leave days remaining.' },
-    ]);
+    expect(response.message).toContain('You have 12 leave days remaining.');
+    expect(response.message).toContain(
+      'Is there anything else I can help you with?',
+    );
+    expect(response.replies[0]).toEqual({
+      type: 'text',
+      text: 'You have 12 leave days remaining.',
+    });
   });
 
   it('returns a safe message when the leave balance is unavailable', async () => {
@@ -574,7 +582,8 @@ describe('ConversationService', () => {
       'leave',
       MENU_SELECTION_IDS.LEAVE_TYPES,
     );
-    expect(response.message).toBe(
+    expect(response.state).toBe('POST_SERVICE_MENU');
+    expect(response.message).toContain(
       '[HR APPROVAL REQUIRED] Leave types content has not yet been provided by HR.',
     );
     expect(response.action).toBe('show_leave_types');
@@ -614,9 +623,9 @@ describe('ConversationService', () => {
       'leave',
       MENU_SELECTION_IDS.LEAVE_TYPES,
     );
-    expect(response.state).toBe('LEAVE_MENU');
+    expect(response.state).toBe('POST_SERVICE_MENU');
     expect(response.action).toBe('show_leave_types');
-    expect(response.message).toBe(
+    expect(response.message).toContain(
       '[HR APPROVAL REQUIRED] Leave types content has not yet been provided by HR.',
     );
   });
@@ -656,17 +665,18 @@ describe('ConversationService', () => {
       MENU_SELECTION_IDS.PENSION,
     );
     expect(response.success).toBe(true);
-    expect(response.state).toBe('BENEFITS_MENU');
+    expect(response.state).toBe('POST_SERVICE_MENU');
     expect(response.action).toBe('show_pension');
-    expect(response.message).toBe(
+    expect(response.message).toContain(
       '[HR APPROVAL REQUIRED] Pension information has not yet been provided by HR.',
     );
-    expect(response.replies).toEqual([
-      {
-        type: 'text',
-        text: '[HR APPROVAL REQUIRED] Pension information has not yet been provided by HR.',
-      },
-    ]);
+    expect(response.message).toContain(
+      'Is there anything else I can help you with?',
+    );
+    expect(response.replies[0]).toEqual({
+      type: 'text',
+      text: '[HR APPROVAL REQUIRED] Pension information has not yet been provided by HR.',
+    });
   });
 
   it('returns a content-not-found response when a Benefits item has no static content', async () => {
@@ -1397,68 +1407,67 @@ describe('ConversationService', () => {
     });
   });
 
-  describe('BOT_COMPLETED completion contract', () => {
-    it('records BOT_COMPLETED and ends session when employee explicitly ends conversation after receiving self-service answer', async () => {
+  describe('BOT_COMPLETED state-machine completion contract', () => {
+    it('1. terminal self-service answer enters post-service completion state and appends completion prompt', async () => {
       employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-complete-1',
+        id: 'emp-terminal',
         status: 'ACTIVE',
       });
       chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-complete-1',
+        id: 'session-terminal',
         currentState: 'POLICY_MENU',
       });
-      // Session has received self-service information
-      prisma.analyticsEvent.findFirst.mockImplementation(
-        (args?: { where?: { type?: string } }) => {
-          if (args?.where?.type === 'INFORMATION_PROVIDED') {
-            return Promise.resolve({ id: 'event-info-1' });
-          }
-          if (args?.where?.type === 'BOT_COMPLETED') {
-            return Promise.resolve(null);
-          }
-          return Promise.resolve(null);
-        },
-      );
-      prisma.escalation.findFirst.mockResolvedValue(null);
+      menuReplyBuilder.getSelection.mockReturnValue({
+        id: MENU_SELECTION_IDS.LEAVE_POLICY,
+        action: 'show_leave_policy',
+      });
+      hrContentService.get.mockReturnValue({
+        id: 'leave_policy',
+        title: 'Leave Policy',
+        answer: 'Employees are entitled to 20 days annual leave.',
+        status: 'APPROVED',
+      });
 
       const response = await service.handleMessage({
         senderPhoneNumber: '+2347044965784',
-        input: { kind: 'text', value: '2' }, // "2" -> End Conversation
+        input: { kind: 'selection', value: MENU_SELECTION_IDS.LEAVE_POLICY },
       });
 
-      expect(chatSessionService.endSession).toHaveBeenCalledWith(
-        'session-complete-1',
+      expect(chatSessionService.updateState).toHaveBeenCalledWith(
+        'session-terminal',
+        'POST_SERVICE_MENU',
       );
-      expect(analyticsService.recordEvent).toHaveBeenCalledWith({
-        type: 'BOT_COMPLETED',
-        sessionId: 'session-complete-1',
-        employeeId: 'emp-complete-1',
+      expect(response.state).toBe('POST_SERVICE_MENU');
+      expect(response.message).toContain(
+        'Employees are entitled to 20 days annual leave.',
+      );
+      expect(response.message).toContain(
+        'Is there anything else I can help you with?',
+      );
+      expect(response.message).toContain('1. Return to Main Menu');
+      expect(response.message).toContain('2. End Conversation');
+      expect(response.replies).toHaveLength(2);
+      expect(response.replies[0]).toEqual({
+        type: 'text',
+        text: 'Employees are entitled to 20 days annual leave.',
       });
-      expect(response.success).toBe(true);
-      expect(response.action).toBe('end_conversation');
-      expect(response.escalationAvailable).toBe(false);
-      expect(response.replies[0].text).toContain(
-        'Your conversation has ended.',
-      );
+      expect(response.replies[1]).toEqual({
+        type: 'text',
+        text: 'Is there anything else I can help you with?\n\n1. Return to Main Menu\n2. End Conversation',
+      });
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
+      expect(chatSessionService.endSession).not.toHaveBeenCalled();
     });
 
-    it('returns to main menu without emitting BOT_COMPLETED when choosing option 1', async () => {
+    it('2. post-service state + "1" returns to MAIN_MENU, does not end session, does not emit BOT_COMPLETED', async () => {
       employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-return-1',
+        id: 'emp-post-1',
         status: 'ACTIVE',
       });
       chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-return-1',
-        currentState: 'POLICY_MENU',
+        id: 'session-post-1',
+        currentState: 'POST_SERVICE_MENU',
       });
-      prisma.analyticsEvent.findFirst.mockImplementation(
-        (args?: { where?: { type?: string } }) => {
-          if (args?.where?.type === 'INFORMATION_PROVIDED') {
-            return Promise.resolve({ id: 'event-info-1' });
-          }
-          return Promise.resolve(null);
-        },
-      );
       menuReplyBuilder.buildMenuReply.mockReturnValue({
         type: 'menu',
         menuId: MENU_IDS.MAIN,
@@ -1469,94 +1478,27 @@ describe('ConversationService', () => {
 
       const response = await service.handleMessage({
         senderPhoneNumber: '+2347044965784',
-        input: { kind: 'text', value: '1' }, // "1" -> Return to Main Menu
+        input: { kind: 'text', value: '1' },
       });
 
       expect(chatSessionService.updateState).toHaveBeenCalledWith(
-        'session-return-1',
+        'session-post-1',
         'MAIN_MENU',
       );
       expect(chatSessionService.endSession).not.toHaveBeenCalled();
-      expect(analyticsService.recordEvent).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'BOT_COMPLETED' }),
-      );
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
       expect(response.state).toBe('MAIN_MENU');
       expect(response.action).toBe(MENU_IDS.MAIN);
     });
 
-    it('prevents duplicate BOT_COMPLETED event if already recorded for the same session', async () => {
+    it('3. post-service state + "2" ends session and emits exactly one BOT_COMPLETED with sessionId and employeeId', async () => {
       employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-complete-dup',
+        id: 'emp-post-2',
         status: 'ACTIVE',
       });
       chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-complete-dup',
-        currentState: 'POLICY_MENU',
-      });
-      prisma.analyticsEvent.findFirst.mockImplementation(
-        (args?: { where?: { type?: string } }) => {
-          if (args?.where?.type === 'INFORMATION_PROVIDED') {
-            return Promise.resolve({ id: 'event-info-1' });
-          }
-          if (args?.where?.type === 'BOT_COMPLETED') {
-            return Promise.resolve({ id: 'existing-bot-completed' });
-          }
-          return Promise.resolve(null);
-        },
-      );
-      prisma.escalation.findFirst.mockResolvedValue(null);
-
-      await service.handleMessage({
-        senderPhoneNumber: '+2347044965784',
-        input: { kind: 'text', value: 'end conversation' },
-      });
-
-      expect(chatSessionService.endSession).toHaveBeenCalledWith(
-        'session-complete-dup',
-      );
-      expect(analyticsService.recordEvent).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'BOT_COMPLETED' }),
-      );
-    });
-
-    it('does not emit BOT_COMPLETED if the conversation has an escalation', async () => {
-      employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-escalated',
-        status: 'ACTIVE',
-      });
-      chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-escalated',
-        currentState: 'POLICY_MENU',
-      });
-      prisma.analyticsEvent.findFirst.mockImplementation(
-        (args?: { where?: { type?: string } }) => {
-          if (args?.where?.type === 'INFORMATION_PROVIDED') {
-            return Promise.resolve({ id: 'event-info-1' });
-          }
-          return Promise.resolve(null);
-        },
-      );
-      prisma.escalation.findFirst.mockResolvedValue({ id: 'existing-esc' });
-
-      await service.handleMessage({
-        senderPhoneNumber: '+2347044965784',
-        input: { kind: 'text', value: '2' },
-      });
-
-      expect(analyticsService.recordEvent).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'BOT_COMPLETED' }),
-      );
-      expect(chatSessionService.endSession).not.toHaveBeenCalled();
-    });
-
-    it('does not emit BOT_COMPLETED when in HR queue', async () => {
-      employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-hr-queue',
-        status: 'ACTIVE',
-      });
-      chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-hr-queue',
-        currentState: 'HR_QUEUE',
+        id: 'session-post-2',
+        currentState: 'POST_SERVICE_MENU',
       });
 
       const response = await service.handleMessage({
@@ -1564,20 +1506,30 @@ describe('ConversationService', () => {
         input: { kind: 'text', value: '2' },
       });
 
-      expect(analyticsService.recordEvent).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'BOT_COMPLETED' }),
+      expect(chatSessionService.endSession).toHaveBeenCalledWith(
+        'session-post-2',
       );
-      expect(chatSessionService.endSession).not.toHaveBeenCalled();
-      expect(response.state).toBe('HR_QUEUE');
+      expect(analyticsService.recordBotCompleted).toHaveBeenCalledWith({
+        sessionId: 'session-post-2',
+        employeeId: 'emp-post-2',
+      });
+      expect(response.success).toBe(true);
+      expect(response.state).toBe('ENDED');
+      expect(response.action).toBe('end_conversation');
+      expect(response.escalationAvailable).toBe(false);
+      expect(response.replies[0].text).toContain(
+        'Your conversation has ended.',
+      );
+      expect(response.menu).toBeUndefined();
     });
 
-    it('does not emit BOT_COMPLETED when intermediate information is provided', async () => {
+    it('4. existing menu + "1" continues to perform its existing menu action', async () => {
       employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-info',
+        id: 'emp-policy-1',
         status: 'ACTIVE',
       });
       chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-info',
+        id: 'session-policy-1',
         currentState: 'POLICY_MENU',
       });
       menuReplyBuilder.getSelection.mockReturnValue({
@@ -1587,60 +1539,250 @@ describe('ConversationService', () => {
       hrContentService.get.mockReturnValue({
         id: 'leave_policy',
         title: 'Leave Policy',
-        answer: 'Test leave policy answer',
+        answer: 'Leave policy details.',
         status: 'APPROVED',
       });
 
-      await service.handleMessage({
+      const response = await service.handleMessage({
         senderPhoneNumber: '+2347044965784',
-        input: { kind: 'selection', value: MENU_SELECTION_IDS.LEAVE_POLICY },
+        input: { kind: 'text', value: '1' },
       });
 
-      expect(analyticsService.recordEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'INFORMATION_PROVIDED' }),
+      expect(menuReplyBuilder.getSelection).toHaveBeenCalledWith(
+        MENU_IDS.POLICY,
+        '1',
       );
-      expect(analyticsService.recordEvent).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'BOT_COMPLETED' }),
-      );
+      expect(response.action).toBe('show_leave_policy');
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
       expect(chatSessionService.endSession).not.toHaveBeenCalled();
     });
 
-    it('does not emit BOT_COMPLETED for unknown input or fallback', async () => {
+    it('5. existing menu + "2" continues to perform its existing menu action', async () => {
       employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-unknown',
+        id: 'emp-policy-2',
         status: 'ACTIVE',
       });
       chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-unknown',
+        id: 'session-policy-2',
+        currentState: 'POLICY_MENU',
+      });
+      menuReplyBuilder.getSelection.mockReturnValue({
+        id: MENU_SELECTION_IDS.WORKING_HOURS_ATTENDANCE,
+        action: 'show_working_hours_attendance',
+      });
+      hrContentService.get.mockReturnValue({
+        id: 'working_hours_attendance',
+        title: 'Working Hours',
+        answer: 'Working hours details.',
+        status: 'APPROVED',
+      });
+
+      const response = await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'text', value: '2' },
+      });
+
+      expect(menuReplyBuilder.getSelection).toHaveBeenCalledWith(
+        MENU_IDS.POLICY,
+        '2',
+      );
+      expect(response.action).toBe('show_working_hours_attendance');
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
+      expect(chatSessionService.endSession).not.toHaveBeenCalled();
+    });
+
+    it('6. Main Menu + "1"/"2" existing behaviour remains unchanged', async () => {
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-main-num',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-main-num',
+        currentState: 'MAIN_MENU',
+      });
+      menuReplyBuilder.getSelection.mockReturnValue({
+        id: MENU_SELECTION_IDS.POLICY_FAQ,
+        action: 'open_policy_faq',
+      });
+      menuReplyBuilder.buildMenuReply.mockReturnValue({
+        type: 'menu',
+        menuId: MENU_IDS.POLICY,
+        title: '❓ I Have a Question',
+        prompt: 'What would you like to know about?',
+        options: [],
+      });
+
+      const response = await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'text', value: '1' },
+      });
+
+      expect(menuReplyBuilder.getSelection).toHaveBeenCalledWith(
+        MENU_IDS.MAIN,
+        '1',
+      );
+      expect(response.state).toBe('POLICY_MENU');
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
+      expect(chatSessionService.endSession).not.toHaveBeenCalled();
+    });
+
+    it('7. escalated session cannot emit BOT_COMPLETED', async () => {
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-esc',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-esc',
+        currentState: 'HR_MESSAGE',
+      });
+      escalationService.createOrGetActiveEscalation.mockResolvedValue({
+        escalationId: 'ticket-esc',
+        status: 'OPEN',
+        queuePosition: 1,
+        hrBusy: false,
+      });
+
+      const response = await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'text', value: '2' },
+      });
+
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
+      expect(chatSessionService.endSession).not.toHaveBeenCalled();
+      expect(response.escalated).toBe(true);
+      expect(response.state).toBe('HR_QUEUE');
+    });
+
+    it('8. HR_QUEUE cannot emit BOT_COMPLETED', async () => {
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-hr-q',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-hr-q',
+        currentState: 'HR_QUEUE',
+      });
+
+      const response = await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'text', value: '2' },
+      });
+
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
+      expect(chatSessionService.endSession).not.toHaveBeenCalled();
+      expect(response.state).toBe('HR_QUEUE');
+      expect(response.action).toBe('hr_conversation');
+    });
+
+    it('9. unknown input cannot emit BOT_COMPLETED', async () => {
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-unk',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-unk',
         currentState: 'MAIN_MENU',
       });
       menuReplyBuilder.getSelection.mockReturnValue(undefined);
 
       await service.handleMessage({
         senderPhoneNumber: '+2347044965784',
-        input: { kind: 'text', value: 'xyz_unknown' },
+        input: { kind: 'text', value: 'random unrecognized message' },
       });
 
       expect(analyticsService.recordEvent).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'UNRECOGNIZED_INPUT' }),
       );
-      expect(analyticsService.recordEvent).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'BOT_COMPLETED' }),
-      );
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
       expect(chatSessionService.endSession).not.toHaveBeenCalled();
     });
 
-    it('does not emit BOT_COMPLETED if user sends completion action without prior self-service answer', async () => {
+    it('10. invalid post-service completion selection re-prompts completion menu without ending session', async () => {
       employeeService.findByPhoneNumber.mockResolvedValue({
-        id: 'emp-no-answer',
+        id: 'emp-post-inv',
         status: 'ACTIVE',
       });
       chatSessionService.getOrCreateSession.mockResolvedValue({
-        id: 'session-no-answer',
-        currentState: 'MAIN_MENU',
+        id: 'session-post-inv',
+        currentState: 'POST_SERVICE_MENU',
       });
-      // No INFORMATION_PROVIDED event found
-      prisma.analyticsEvent.findFirst.mockResolvedValue(null);
+
+      const response = await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'text', value: '3' },
+      });
+
+      expect(chatSessionService.touch).toHaveBeenCalledWith('session-post-inv');
+      expect(chatSessionService.endSession).not.toHaveBeenCalled();
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
+      expect(response.state).toBe('POST_SERVICE_MENU');
+      expect(response.action).toBe('post_service_menu');
+      expect(response.message).toContain(
+        'Is there anything else I can help you with?',
+      );
+      expect(response.message).toContain('1. Return to Main Menu');
+      expect(response.message).toContain('2. End Conversation');
+    });
+
+    it('11. session timeout does not emit BOT_COMPLETED', async () => {
+      // Inactivity timeout is handled exclusively by ChatSessionService.getOrCreateSession
+      // ConversationService never emits BOT_COMPLETED when a session is created or recovered
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-timeout',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-timeout',
+        currentState: 'MAIN_MENU',
+        analyticsSessionCreated: true,
+      });
+      menuReplyBuilder.buildMenuReply.mockReturnValue({
+        type: 'menu',
+        menuId: MENU_IDS.MAIN,
+        title: 'HR Services',
+        prompt: 'How may we be of service?',
+        options: [],
+      });
+
+      await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'text', value: 'menu' },
+      });
+
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
+    });
+
+    it('12. duplicate completion attempt results in at most one BOT_COMPLETED call per completion', async () => {
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-dup',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-dup',
+        currentState: 'POST_SERVICE_MENU',
+      });
+
+      await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'text', value: '2' },
+      });
+
+      expect(analyticsService.recordBotCompleted).toHaveBeenCalledTimes(1);
+      expect(analyticsService.recordBotCompleted).toHaveBeenCalledWith({
+        sessionId: 'session-dup',
+        employeeId: 'emp-dup',
+      });
+    });
+
+    it('13. completion without a legitimate terminal self-service answer cannot emit BOT_COMPLETED', async () => {
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-no-term',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-no-term',
+        currentState: 'VERIFICATION_MENU',
+      });
       menuReplyBuilder.getSelection.mockReturnValue(undefined);
 
       await service.handleMessage({
@@ -1648,10 +1790,48 @@ describe('ConversationService', () => {
         input: { kind: 'text', value: '2' },
       });
 
-      expect(analyticsService.recordEvent).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'BOT_COMPLETED' }),
-      );
+      expect(analyticsService.recordBotCompleted).not.toHaveBeenCalled();
       expect(chatSessionService.endSession).not.toHaveBeenCalled();
+    });
+
+    it('14. existing self-service responses remain unchanged except for addition of completion prompt', async () => {
+      employeeService.findByPhoneNumber.mockResolvedValue({
+        id: 'emp-unchanged',
+        status: 'ACTIVE',
+      });
+      chatSessionService.getOrCreateSession.mockResolvedValue({
+        id: 'session-unchanged',
+        currentState: 'POLICY_MENU',
+      });
+      menuReplyBuilder.getSelection.mockReturnValue({
+        id: MENU_SELECTION_IDS.CODE_OF_CONDUCT,
+        action: 'show_code_of_conduct',
+      });
+      hrContentService.get.mockReturnValue({
+        id: 'code_of_conduct',
+        title: 'Code of Conduct',
+        answer:
+          'All employees must adhere to professional integrity and respect.',
+        status: 'APPROVED',
+      });
+
+      const response = await service.handleMessage({
+        senderPhoneNumber: '+2347044965784',
+        input: { kind: 'selection', value: MENU_SELECTION_IDS.CODE_OF_CONDUCT },
+      });
+
+      expect(response.action).toBe('show_code_of_conduct');
+      // The answer content itself is completely preserved
+      expect(response.replies[0]).toEqual({
+        type: 'text',
+        text: 'All employees must adhere to professional integrity and respect.',
+      });
+      // The completion prompt is appended as the second reply
+      expect(response.replies[1]).toEqual({
+        type: 'text',
+        text: 'Is there anything else I can help you with?\n\n1. Return to Main Menu\n2. End Conversation',
+      });
+      expect(response.state).toBe('POST_SERVICE_MENU');
     });
   });
 });

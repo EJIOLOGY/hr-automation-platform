@@ -221,33 +221,6 @@ export class ConversationService {
     }
 
     /**
-     * Deterministic self-service completion contract:
-     * When an employee has received a terminal self-service answer/lookup result
-     * and chooses "Return to Main Menu" or "End Conversation".
-     */
-    if (this.isEndConversationAction(selection)) {
-      const completionResult = await this.handleEndConversation(
-        employee.id,
-        session.id,
-      );
-
-      if (completionResult) {
-        return completionResult;
-      }
-    }
-
-    if (this.isReturnToMainMenuAction(selection)) {
-      const returnResult = await this.handleReturnToMainMenu(
-        employee.id,
-        session.id,
-      );
-
-      if (returnResult) {
-        return returnResult;
-      }
-    }
-
-    /**
      * Global main-menu navigation.
      *
      * This remains available while the employee is waiting
@@ -316,6 +289,13 @@ export class ConversationService {
           session.currentState,
           selection,
           message,
+        );
+
+      case 'POST_SERVICE_MENU':
+        return this.handlePostServiceMenuSelection(
+          employee.id,
+          session.id,
+          selection,
         );
 
       default:
@@ -446,20 +426,11 @@ export class ConversationService {
       action: menuSelection.action,
     });
 
-    return {
-      success: true,
+    return this.buildPostServiceCompletionResponse(
       sessionId,
-      state: 'POLICY_MENU',
-      action: menuSelection.action,
-      message: content.answer,
-      replies: [
-        {
-          type: 'text',
-          text: content.answer,
-        },
-      ],
-      escalationAvailable: true,
-    };
+      menuSelection.action,
+      content.answer,
+    );
   }
 
   /**
@@ -520,20 +491,11 @@ export class ConversationService {
         action: menuSelection.action,
       });
 
-      return {
-        success: true,
+      return this.buildPostServiceCompletionResponse(
         sessionId,
-        state: 'LEAVE_MENU',
-        action: menuSelection.action,
-        message: content.answer,
-        replies: [
-          {
-            type: 'text',
-            text: content.answer,
-          },
-        ],
-        escalationAvailable: true,
-      };
+        menuSelection.action,
+        content.answer,
+      );
     }
 
     return this.createResponse(sessionId, 'LEAVE_MENU', menuSelection.action);
@@ -554,20 +516,11 @@ export class ConversationService {
           action: 'open_leave_balance',
         });
 
-        return {
-          success: true,
+        return this.buildPostServiceCompletionResponse(
           sessionId,
-          state: 'LEAVE_MENU',
-          action: 'open_leave_balance',
-          message: `You have ${result.balance.remainingDays} leave day${result.balance.remainingDays === 1 ? '' : 's'} remaining.`,
-          replies: [
-            {
-              type: 'text',
-              text: `You have ${result.balance.remainingDays} leave day${result.balance.remainingDays === 1 ? '' : 's'} remaining.`,
-            },
-          ],
-          escalationAvailable: true,
-        };
+          'open_leave_balance',
+          `You have ${result.balance.remainingDays} leave day${result.balance.remainingDays === 1 ? '' : 's'} remaining.`,
+        );
 
       case 'employee-not-found':
       case 'invalid-phone-number':
@@ -630,20 +583,11 @@ export class ConversationService {
       action: menuSelection.action,
     });
 
-    return {
-      success: true,
+    return this.buildPostServiceCompletionResponse(
       sessionId,
-      state: 'BENEFITS_MENU',
-      action: menuSelection.action,
-      message: content.answer,
-      replies: [
-        {
-          type: 'text',
-          text: content.answer,
-        },
-      ],
-      escalationAvailable: true,
-    };
+      menuSelection.action,
+      content.answer,
+    );
   }
 
   /**
@@ -1244,6 +1188,8 @@ export class ConversationService {
         return MENU_IDS.MAIN;
       case 'DOCUMENT_REQUEST_MENU':
         return MENU_IDS.VERIFICATION;
+      case 'POST_SERVICE_MENU':
+        return MENU_IDS.MAIN;
       default:
         return undefined;
     }
@@ -1279,124 +1225,81 @@ export class ConversationService {
   }
 
   /**
-   * Recognizes explicit actions to return to the main menu from completion prompt.
+   * Handles selections from the post-service completion prompt.
+   *
+   * This state is only entered after a legitimate terminal self-service
+   * answer has been produced. "1" and "2" are interpreted as completion
+   * options ONLY in this state, preserving their meaning as menu
+   * selections in all other states.
    */
-  private isReturnToMainMenuAction(selection: string): boolean {
-    return [
-      '1',
-      'return to main menu',
-      'return_to_main_menu',
-      'main menu',
-    ].includes(selection);
-  }
-
-  /**
-   * Recognizes explicit actions to end the conversation.
-   */
-  private isEndConversationAction(selection: string): boolean {
-    return [
-      '2',
-      'end conversation',
-      'end_conversation',
-      'end',
-      'finish',
-      'done',
-    ].includes(selection);
-  }
-
-  /**
-   * Handles explicit return to main menu after receiving self-service resolution.
-   * Returns null if session was not in a post-answer state.
-   */
-  private async handleReturnToMainMenu(
+  private async handlePostServiceMenuSelection(
     employeeId: string,
     sessionId: string,
-  ): Promise<ConversationResponse | null> {
-    const hasValidSelfServiceAnswer =
-      await this.hasValidSelfServiceAnswer(sessionId);
+    selection: string,
+  ): Promise<ConversationResponse> {
+    if (selection === '1') {
+      await this.chatSessionService.updateState(sessionId, 'MAIN_MENU');
 
-    if (!hasValidSelfServiceAnswer) {
-      return null;
-    }
-
-    await this.chatSessionService.updateState(sessionId, 'MAIN_MENU');
-
-    return this.createMenuResponse(
-      sessionId,
-      MENU_IDS.MAIN,
-      'MAIN_MENU',
-      employeeId,
-    );
-  }
-
-  /**
-   * Handles explicit ending of conversation after receiving self-service resolution.
-   * Emits exactly one BOT_COMPLETED event and ends the session.
-   * Returns null if session did not meet genuine completion criteria.
-   */
-  private async handleEndConversation(
-    employeeId: string,
-    sessionId: string,
-  ): Promise<ConversationResponse | null> {
-    const hasValidSelfServiceAnswer =
-      await this.hasValidSelfServiceAnswer(sessionId);
-
-    if (!hasValidSelfServiceAnswer) {
-      return null;
-    }
-
-    // Must not be an escalated session
-    const hasEscalation = await this.prisma.escalation.findFirst({
-      where: { sessionId },
-      select: { id: true },
-    });
-
-    if (hasEscalation) {
-      return null;
-    }
-
-    // End the session lifecycle
-    await this.chatSessionService.endSession(sessionId);
-
-    // Prevent duplicate BOT_COMPLETED events
-    const alreadyRecorded = await this.prisma.analyticsEvent.findFirst({
-      where: {
+      return this.createMenuResponse(
         sessionId,
-        type: AnalyticsEventType.BOT_COMPLETED,
-      },
-      select: { id: true },
-    });
+        MENU_IDS.MAIN,
+        'MAIN_MENU',
+        employeeId,
+      );
+    }
 
-    if (!alreadyRecorded) {
-      this.recordAnalyticsEvent({
-        type: AnalyticsEventType.BOT_COMPLETED,
+    if (selection === '2') {
+      await this.chatSessionService.endSession(sessionId);
+
+      await this.analyticsService.recordBotCompleted({
         sessionId,
         employeeId,
       });
+
+      const replyText =
+        'Thank you for using HR Services. Your conversation has ended. Have a great day!';
+
+      await this.prisma.chatMessage.create({
+        data: {
+          sessionId,
+          direction: MessageDirection.OUTBOUND,
+          messageType: MessageType.TEXT,
+          content: replyText,
+        },
+      });
+
+      return {
+        success: true,
+        sessionId,
+        state: 'ENDED',
+        action: 'end_conversation',
+        message: replyText,
+        replies: [
+          {
+            type: 'text',
+            text: replyText,
+          },
+        ],
+        escalationAvailable: false,
+      };
     }
 
-    const replyText =
-      'Thank you for using HR Services. Your conversation has ended. Have a great day!';
+    // Invalid selection — re-prompt the completion menu
+    await this.chatSessionService.touch(sessionId);
 
-    await this.prisma.chatMessage.create({
-      data: {
-        sessionId,
-        direction: MessageDirection.OUTBOUND,
-        messageType: MessageType.TEXT,
-        content: replyText,
-      },
-    });
+    const completionPrompt =
+      'Is there anything else I can help you with?\n\n1. Return to Main Menu\n2. End Conversation';
 
     return {
       success: true,
       sessionId,
-      state: 'MAIN_MENU',
-      action: 'end_conversation',
-      message: replyText,
+      state: 'POST_SERVICE_MENU',
+      action: 'post_service_menu',
+      message: completionPrompt,
       replies: [
         {
           type: 'text',
-          text: replyText,
+          text: completionPrompt,
         },
       ],
       escalationAvailable: false,
@@ -1404,17 +1307,41 @@ export class ConversationService {
   }
 
   /**
-   * Checks whether the session has received a valid self-service answer/lookup result.
+   * Builds a response that delivers the terminal self-service answer
+   * and transitions the session into POST_SERVICE_MENU.
+   *
+   * The reply includes both the answer text and the completion prompt
+   * so the employee sees them in a single response.
    */
-  private async hasValidSelfServiceAnswer(sessionId: string): Promise<boolean> {
-    const infoEvent = await this.prisma.analyticsEvent.findFirst({
-      where: {
-        sessionId,
-        type: AnalyticsEventType.INFORMATION_PROVIDED,
-      },
-      select: { id: true },
-    });
+  private async buildPostServiceCompletionResponse(
+    sessionId: string,
+    action: string,
+    answerText: string,
+  ): Promise<ConversationResponse> {
+    await this.chatSessionService.updateState(sessionId, 'POST_SERVICE_MENU');
 
-    return Boolean(infoEvent);
+    const completionPrompt =
+      'Is there anything else I can help you with?\n\n1. Return to Main Menu\n2. End Conversation';
+
+    const fullMessage = `${answerText}\n\n${completionPrompt}`;
+
+    return {
+      success: true,
+      sessionId,
+      state: 'POST_SERVICE_MENU',
+      action,
+      message: fullMessage,
+      replies: [
+        {
+          type: 'text',
+          text: answerText,
+        },
+        {
+          type: 'text',
+          text: completionPrompt,
+        },
+      ],
+      escalationAvailable: false,
+    };
   }
 }

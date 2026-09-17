@@ -9,5 +9,7 @@ export enum ConversationState {
   HR_MESSAGE = 'HR_MESSAGE',
   HR_QUEUE = 'HR_QUEUE',
 
+  POST_SERVICE_MENU = 'POST_SERVICE_MENU',
+
   ESCALATION = 'ESCALATION',
 }
