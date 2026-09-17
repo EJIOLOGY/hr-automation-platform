@@ -928,10 +928,7 @@ describe('ConversationService', () => {
     expect(response.escalated).toBe(true);
     expect(response.escalationId).toBe('ticket-1');
     expect(response.state).toBe('HR_QUEUE');
-    expect(response.replies[0]).toEqual({
-      type: 'text',
-      text: 'Your request has been added to the HR queue. You are number 1 in the queue. An HR representative will attend to you shortly.',
-    });
+    expect(response.replies).toEqual([]);
   });
 
   it('keeps subsequent employee messages in the active HR conversation without creating another ticket', async () => {
@@ -960,10 +957,7 @@ describe('ConversationService', () => {
     );
     expect(response.state).toBe('HR_QUEUE');
     expect(response.action).toBe('hr_conversation');
-    expect(response.replies[0]).toEqual({
-      type: 'text',
-      text: 'Your message has been added to your HR request. An HR representative will respond as soon as possible.',
-    });
+    expect(response.replies).toEqual([]);
   });
 
   it('prompts again when the HR issue is empty', async () => {

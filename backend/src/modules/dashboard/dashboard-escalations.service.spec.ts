@@ -1,5 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+
 import { EscalationStatus } from '../../generated/prisma/enums';
+
 import { DashboardEscalationsService } from './dashboard-escalations.service';
 
 describe('DashboardEscalationsService', () => {
@@ -7,8 +9,11 @@ describe('DashboardEscalationsService', () => {
   let prisma: any;
   let escalationService: any;
   let auditService: any;
+  let whatsappGraphClient: any;
+  let realtimeGateway: any;
 
   const officerId = 'officer-1';
+
   const employee = {
     id: 'employee-1',
     employeeNumber: 'EMP001',
@@ -18,6 +23,7 @@ describe('DashboardEscalationsService', () => {
     jobTitle: 'Engineer',
     status: 'ACTIVE',
   };
+
   const session = {
     id: 'session-1',
     currentState: 'MAIN_MENU',
@@ -32,25 +38,48 @@ describe('DashboardEscalationsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      chatMessage: {
+        create: jest.fn().mockResolvedValue({}),
+      },
+      chatSession: {
+        update: jest.fn().mockResolvedValue({}),
+      },
     };
+
+    prisma.$transaction = jest.fn(async (callback: (tx: any) => unknown) =>
+      callback(prisma),
+    );
+
     escalationService = {
       startHandling: jest.fn(),
       resolveEscalation: jest.fn(),
       closeEscalation: jest.fn(),
     };
+
     auditService = {
       log: jest.fn().mockResolvedValue({}),
+    };
+
+    whatsappGraphClient = {
+      sendMessage: jest.fn().mockResolvedValue(true),
+    };
+
+    realtimeGateway = {
+      notifyNewMessage: jest.fn(),
     };
 
     service = new DashboardEscalationsService(
       prisma,
       escalationService,
       auditService,
+      whatsappGraphClient,
+      realtimeGateway,
     );
   });
 
   it('lists escalations with cursor pagination', async () => {
     const createdAt = new Date('2026-08-21T10:00:00.000Z');
+
     prisma.escalation.findMany.mockResolvedValue([
       {
         id: 'esc-1',
@@ -86,6 +115,7 @@ describe('DashboardEscalationsService', () => {
       assignedHrOfficer: null,
       session,
     };
+
     const updated = {
       ...openEscalation,
       status: EscalationStatus.IN_PROGRESS,
@@ -99,15 +129,18 @@ describe('DashboardEscalationsService', () => {
     };
 
     prisma.escalation.findUnique.mockResolvedValue(openEscalation);
+
     escalationService.startHandling.mockResolvedValue({
       ...openEscalation,
       status: EscalationStatus.IN_PROGRESS,
     });
+
     prisma.escalation.update.mockResolvedValue(updated);
 
     const result = await service.claim('esc-1', { hrOfficerId: officerId });
 
     expect(result.assignedHrOfficerId).toBe(officerId);
+
     expect(auditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'ESCALATION_CLAIMED' }),
     );
@@ -137,12 +170,21 @@ describe('DashboardEscalationsService', () => {
       assignedHrOfficer: null,
       session,
     };
+
     const resolved = {
       ...escalation,
       status: EscalationStatus.RESOLVED,
       resolvedAt: new Date(),
     };
-    const updated = { ...resolved, resolutionNote: 'Resolved by HR.' };
+
+    const updated = {
+      ...resolved,
+      resolutionNote: 'Resolved by HR.',
+      session: {
+        ...session,
+        currentState: 'AWAITING_FEEDBACK',
+      },
+    };
 
     prisma.escalation.findUnique.mockResolvedValue(escalation);
     escalationService.resolveEscalation.mockResolvedValue(resolved);
@@ -154,6 +196,34 @@ describe('DashboardEscalationsService', () => {
     });
 
     expect(result.resolutionNote).toBe('Resolved by HR.');
+
+    expect(whatsappGraphClient.sendMessage).toHaveBeenCalledWith(
+      employee.phoneNumber,
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining(
+          'Please rate your experience from 1 to 5.',
+        ),
+      }),
+    );
+
+    expect(prisma.chatSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: session.id },
+        data: expect.objectContaining({
+          currentState: 'AWAITING_FEEDBACK',
+        }),
+      }),
+    );
+
+    expect(prisma.chatMessage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          content: 'STATE_TRANSITION:HR_QUEUE->AWAITING_FEEDBACK',
+        }),
+      }),
+    );
+
     expect(auditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'ESCALATION_RESOLVED' }),
     );
@@ -168,15 +238,53 @@ describe('DashboardEscalationsService', () => {
       assignedHrOfficer: null,
       session,
     };
-    const updated = { ...escalation, status: EscalationStatus.CLOSED };
+
+    const updated = {
+      ...escalation,
+      status: EscalationStatus.CLOSED,
+      session: {
+        ...session,
+        currentState: 'AWAITING_FEEDBACK',
+      },
+    };
 
     prisma.escalation.findUnique.mockResolvedValue(escalation);
     escalationService.closeEscalation.mockResolvedValue(updated);
     prisma.escalation.update.mockResolvedValue(updated);
 
-    const result = await service.close('esc-1', { hrOfficerId: officerId });
+    const result = await service.close('esc-1', {
+      hrOfficerId: officerId,
+    });
 
     expect(result.status).toBe(EscalationStatus.CLOSED);
+
+    expect(whatsappGraphClient.sendMessage).toHaveBeenCalledWith(
+      employee.phoneNumber,
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining(
+          'Please rate your experience from 1 to 5.',
+        ),
+      }),
+    );
+
+    expect(prisma.chatSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: session.id },
+        data: expect.objectContaining({
+          currentState: 'AWAITING_FEEDBACK',
+        }),
+      }),
+    );
+
+    expect(prisma.chatMessage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          content: 'STATE_TRANSITION:HR_QUEUE->AWAITING_FEEDBACK',
+        }),
+      }),
+    );
+
     expect(auditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'ESCALATION_CLOSED' }),
     );

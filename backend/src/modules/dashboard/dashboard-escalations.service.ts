@@ -314,7 +314,7 @@ export class DashboardEscalationsService {
           sessionId: escalation.session.id,
           direction: 'OUTBOUND',
           messageType: 'SYSTEM',
-          content: 'STATE_TRANSITION:HR_QUEUE->MAIN_MENU',
+          content: 'STATE_TRANSITION:HR_QUEUE->AWAITING_FEEDBACK',
         },
       });
 
@@ -323,7 +323,7 @@ export class DashboardEscalationsService {
           id: escalation.session.id,
         },
         data: {
-          currentState: 'MAIN_MENU',
+          currentState: 'AWAITING_FEEDBACK',
           lastActivityAt: new Date(),
         },
       });
@@ -431,7 +431,7 @@ export class DashboardEscalationsService {
           sessionId: escalation.session.id,
           direction: 'OUTBOUND',
           messageType: 'SYSTEM',
-          content: 'STATE_TRANSITION:HR_QUEUE->MAIN_MENU',
+          content: 'STATE_TRANSITION:HR_QUEUE->AWAITING_FEEDBACK',
         },
       });
 
@@ -440,7 +440,7 @@ export class DashboardEscalationsService {
           id: escalation.session.id,
         },
         data: {
-          currentState: 'MAIN_MENU',
+          currentState: 'AWAITING_FEEDBACK',
           lastActivityAt: new Date(),
         },
       });
@@ -489,13 +489,13 @@ export class DashboardEscalationsService {
   private buildResolutionMessage(fullName: string): string {
     const firstName = fullName.trim().split(/\s+/)[0] || 'there';
 
-    return `Hi ${firstName}, your HR request has been resolved. Thank you for contacting HR.\n\nYou have been returned to the main menu.`;
+    return `Hi ${firstName}, your HR request has been resolved. Thank you for contacting HR.\n\nPlease rate your experience from 1 to 5.`;
   }
 
   private buildClosureMessage(fullName: string): string {
     const firstName = fullName.trim().split(/\s+/)[0] || 'there';
 
-    return `Hi ${firstName}, your HR request has been closed. Thank you for contacting HR.\n\nYou have been returned to the main menu.`;
+    return `Hi ${firstName}, your HR request has been closed. Thank you for contacting HR.\n\nPlease rate your experience from 1 to 5.`;
   }
 
   private normalizeLimit(value?: number) {

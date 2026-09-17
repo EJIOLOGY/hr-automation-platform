@@ -147,6 +147,10 @@ export class ConversationService {
       return this.handleHrQueueState(session.id);
     }
 
+    if (session.currentState === 'AWAITING_FEEDBACK') {
+      return this.handleFeedbackSubmission(session.id, message);
+    }
+
     const currentMenuId = this.getMenuIdForState(session.currentState);
     const numericMenuSelection =
       currentMenuId && /^\d+$/.test(selection)
@@ -753,17 +757,94 @@ export class ConversationService {
   ): Promise<ConversationResponse> {
     await this.chatSessionService.touch(sessionId);
 
-    const acknowledgement =
-      'Your message has been added to your HR request. An HR representative will respond as soon as possible.';
-
     return {
       success: true,
       sessionId,
       state: 'HR_QUEUE',
       action: 'hr_conversation',
-      message: acknowledgement,
-      replies: [{ type: 'text', text: acknowledgement }],
+      message: '',
+      replies: [],
       escalationAvailable: false,
+    };
+  }
+
+  /**
+   * Handles the employee's post-resolution feedback rating.
+   *
+   * A valid rating is persisted and the session returns to MAIN_MENU
+   * without sending an outbound WhatsApp message.
+   */
+  private async handleFeedbackSubmission(
+    sessionId: string,
+    message: string,
+  ): Promise<ConversationResponse> {
+    const rating = Number(message.trim());
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      const prompt = 'Please rate your experience using a number from 1 to 5.';
+
+      return {
+        success: true,
+        sessionId,
+        state: 'AWAITING_FEEDBACK',
+        action: 'invalid_feedback_rating',
+        message: prompt,
+        replies: [{ type: 'text', text: prompt }],
+        escalationAvailable: false,
+      };
+    }
+
+    const escalation = await this.prisma.escalation.findFirst({
+      where: {
+        sessionId,
+        status: { in: ['RESOLVED', 'CLOSED'] },
+        feedback: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+
+    if (!escalation) {
+      await this.chatSessionService.updateState(sessionId, 'MAIN_MENU');
+
+      return {
+        success: true,
+        sessionId,
+        state: 'MAIN_MENU',
+        action: 'feedback_already_completed',
+        message: '',
+        replies: [],
+        escalationAvailable: true,
+      };
+    }
+
+    await this.prisma.feedback.create({
+      data: {
+        escalationId: escalation.id,
+        sessionId,
+        rating,
+      },
+    });
+
+    await this.chatSessionService.updateState(sessionId, 'MAIN_MENU');
+
+    await this.prisma.chatMessage.create({
+      data: {
+        sessionId,
+        direction: MessageDirection.OUTBOUND,
+        messageType: MessageType.SYSTEM,
+        content: 'STATE_TRANSITION:AWAITING_FEEDBACK->MAIN_MENU',
+      },
+    });
+
+    return {
+      success: true,
+      sessionId,
+      state: 'MAIN_MENU',
+      action: 'feedback_submitted',
+      message: '',
+      replies: [],
+      escalationAvailable: true,
     };
   }
 
@@ -1022,13 +1103,8 @@ export class ConversationService {
         state: 'HR_QUEUE',
         action: 'talk_to_hr',
         status: 'IN_PROGRESS',
-        message: 'An HR representative is currently attending to your request.',
-        replies: [
-          {
-            type: 'text',
-            text: 'An HR representative is currently attending to your request.',
-          },
-        ],
+        message: '',
+        replies: [],
       };
     }
 
@@ -1054,13 +1130,8 @@ export class ConversationService {
         status: 'OPEN',
         queuePosition,
         hrBusy: true,
-        message: `HR is currently assisting another employee. You are number ${queuePosition} in the queue. We will attend to you as soon as an HR representative becomes available.`,
-        replies: [
-          {
-            type: 'text',
-            text: `HR is currently assisting another employee. You are number ${queuePosition} in the queue. We will attend to you as soon as an HR representative becomes available.`,
-          },
-        ],
+        message: '',
+        replies: [],
       };
     }
 
@@ -1083,13 +1154,8 @@ export class ConversationService {
       status: 'OPEN',
       queuePosition,
       hrBusy: false,
-      message: `Your request has been added to the HR queue. You are number ${queuePosition} in the queue. An HR representative will attend to you shortly.`,
-      replies: [
-        {
-          type: 'text',
-          text: `Your request has been added to the HR queue. You are number ${queuePosition} in the queue. An HR representative will attend to you shortly.`,
-        },
-      ],
+      message: '',
+      replies: [],
     };
   }
 
