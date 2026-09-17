@@ -1154,7 +1154,7 @@ export class ConversationService {
     employeeId: string,
     sessionId: string,
     currentState: string,
-    metadata: Record<string, unknown>,
+    metadata: Prisma.InputJsonObject,
   ): void {
     this.recordAnalyticsEvent({
       type: AnalyticsEventType.INFORMATION_PROVIDED,
@@ -1166,7 +1166,6 @@ export class ConversationService {
       },
     });
   }
-
   /* Backward-compatible aliases for Talk to HR. */
   private isTalkToHrAlias(selection: string): boolean {
     return ['talk-to-hr', 'hr', 'escalate'].includes(selection);
