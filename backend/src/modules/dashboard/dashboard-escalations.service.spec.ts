@@ -11,9 +11,7 @@ describe('DashboardEscalationsService', () => {
   let auditService: any;
   let whatsappGraphClient: any;
   let realtimeGateway: any;
-
   const officerId = 'officer-1';
-
   const employee = {
     id: 'employee-1',
     employeeNumber: 'EMP001',
@@ -23,7 +21,6 @@ describe('DashboardEscalationsService', () => {
     jobTitle: 'Engineer',
     status: 'ACTIVE',
   };
-
   const session = {
     id: 'session-1',
     currentState: 'MAIN_MENU',
@@ -137,7 +134,9 @@ describe('DashboardEscalationsService', () => {
 
     prisma.escalation.update.mockResolvedValue(updated);
 
-    const result = await service.claim('esc-1', { hrOfficerId: officerId });
+    const result = await service.claim('esc-1', {
+      hrOfficerId: officerId,
+    });
 
     expect(result.assignedHrOfficerId).toBe(officerId);
 
@@ -202,7 +201,7 @@ describe('DashboardEscalationsService', () => {
       expect.objectContaining({
         type: 'text',
         text: expect.stringContaining(
-          'Please rate your experience from 1 to 5.',
+          'Please rate your experience from **1 to 5**',
         ),
       }),
     );
@@ -258,32 +257,15 @@ describe('DashboardEscalationsService', () => {
 
     expect(result.status).toBe(EscalationStatus.CLOSED);
 
-    expect(whatsappGraphClient.sendMessage).toHaveBeenCalledWith(
-      employee.phoneNumber,
-      expect.objectContaining({
-        type: 'text',
-        text: expect.stringContaining(
-          'Please rate your experience from 1 to 5.',
-        ),
-      }),
-    );
+    // Closing is backend/audit only.
+    // It must not send another employee-facing message.
+    expect(whatsappGraphClient.sendMessage).not.toHaveBeenCalled();
 
-    expect(prisma.chatSession.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: session.id },
-        data: expect.objectContaining({
-          currentState: 'AWAITING_FEEDBACK',
-        }),
-      }),
-    );
+    // Closing must not move the employee into AWAITING_FEEDBACK.
+    expect(prisma.chatSession.update).not.toHaveBeenCalled();
 
-    expect(prisma.chatMessage.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          content: 'STATE_TRANSITION:HR_QUEUE->AWAITING_FEEDBACK',
-        }),
-      }),
-    );
+    // Closing must not create another conversation/system message.
+    expect(prisma.chatMessage.create).not.toHaveBeenCalled();
 
     expect(auditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'ESCALATION_CLOSED' }),

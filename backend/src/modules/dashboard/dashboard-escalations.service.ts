@@ -372,15 +372,6 @@ export class DashboardEscalationsService {
 
     const resolutionNote = this.normalizeResolutionNote(input.resolutionNote);
 
-    const employeeMessage = this.buildClosureMessage(
-      escalation.employee.fullName,
-    );
-
-    await this.sendEmployeeNotification(
-      escalation.employee.phoneNumber,
-      employeeMessage,
-    );
-
     await this.escalationService.closeEscalation(id);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -417,34 +408,6 @@ export class DashboardEscalationsService {
         },
       });
 
-      await tx.chatMessage.create({
-        data: {
-          sessionId: escalation.session.id,
-          direction: 'OUTBOUND',
-          messageType: 'TEXT',
-          content: employeeMessage,
-        },
-      });
-
-      await tx.chatMessage.create({
-        data: {
-          sessionId: escalation.session.id,
-          direction: 'OUTBOUND',
-          messageType: 'SYSTEM',
-          content: 'STATE_TRANSITION:HR_QUEUE->AWAITING_FEEDBACK',
-        },
-      });
-
-      await tx.chatSession.update({
-        where: {
-          id: escalation.session.id,
-        },
-        data: {
-          currentState: 'AWAITING_FEEDBACK',
-          lastActivityAt: new Date(),
-        },
-      });
-
       return updatedEscalation;
     });
 
@@ -459,8 +422,6 @@ export class DashboardEscalationsService {
         resolutionNoteProvided: Boolean(resolutionNote),
       },
     });
-
-    this.realtimeGateway.notifyNewMessage(escalation.session.id, 'OUTBOUND');
 
     return updated;
   }
@@ -489,13 +450,7 @@ export class DashboardEscalationsService {
   private buildResolutionMessage(fullName: string): string {
     const firstName = fullName.trim().split(/\s+/)[0] || 'there';
 
-    return `Hi ${firstName}, your HR request has been resolved. Thank you for contacting HR.\n\nPlease rate your experience from 1 to 5.`;
-  }
-
-  private buildClosureMessage(fullName: string): string {
-    const firstName = fullName.trim().split(/\s+/)[0] || 'there';
-
-    return `Hi ${firstName}, your HR request has been closed. Thank you for contacting HR.\n\nPlease rate your experience from 1 to 5.`;
+    return `Hi ${firstName}, your HR request has been resolved. Thank you for contacting HR.\n\n**How was your experience?**\n\nPlease rate your experience from **1 to 5**, and optionally tell us why.\n\n*Reply like:*\n**5 — HR was very helpful.**`;
   }
 
   private normalizeLimit(value?: number) {

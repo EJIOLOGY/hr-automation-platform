@@ -1511,9 +1511,10 @@ describe('ConversationService', () => {
       expect(response.state).toBe('ENDED');
       expect(response.action).toBe('end_conversation');
       expect(response.escalationAvailable).toBe(false);
-      expect(response.replies[0].text).toContain(
-        'Your conversation has ended.',
-      );
+      expect(response.replies[0]).toEqual({
+        type: 'text',
+        text: expect.stringContaining('Your conversation has ended.'),
+      });
       expect(response.menu).toBeUndefined();
     });
 
