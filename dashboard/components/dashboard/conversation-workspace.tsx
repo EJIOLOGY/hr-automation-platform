@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+
 import {
   AlertTriangle,
   Bot,
@@ -9,6 +10,7 @@ import {
   SendHorizontal,
   UserRound,
 } from "lucide-react";
+
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   getConversationMessages,
@@ -24,7 +26,6 @@ import { useRealtime } from "./realtime-provider";
 export function ConversationWorkspace() {
   const { selectedConversation } = useConversationSelection();
   const { accessToken, refreshAuth, user } = useAuth();
-
   const [messages, setMessages] = useState<ConversationMessage[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -33,8 +34,8 @@ export function ConversationWorkspace() {
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [refreshSignal, setRefreshSignal] = useState(0);
-
   const { joinConversation, leaveConversation, on } = useRealtime();
+
   const selectedConversationId = selectedConversation?.id ?? null;
 
   // Join the room for the open conversation so the gateway only pushes
@@ -69,6 +70,7 @@ export function ConversationWorkspace() {
           setHasError(false);
           setIsLoading(false);
         }
+
         return;
       }
 
@@ -162,6 +164,7 @@ export function ConversationWorkspace() {
 
         try {
           const newToken = await refreshAuth();
+
           if (!active || !newToken || !selectedConversation) return;
 
           const response = await getConversationMessages(
@@ -183,6 +186,7 @@ export function ConversationWorkspace() {
     return () => {
       active = false;
     };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
@@ -269,21 +273,18 @@ export function ConversationWorkspace() {
         </span>
       </header>
 
-      {/* Message history */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {/* Blurred wallpaper layer */}
+      {/* Conversation body — wallpaper covers messages and composer */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[url('/tertiary-telegram-wallpaper.png')] bg-cover bg-center bg-no-repeat">
+        {/* Soft wallpaper layer */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 scale-[1.02] bg-[url('/tertiary-telegram-wallpaper.png')] bg-cover bg-center bg-no-repeat blur-[0.2px]"
+          className="pointer-events-none absolute inset-0 scale-[1.02] bg-[url('/tertiary-telegram-wallpaper.png')] bg-cover bg-center bg-no-repeat blur-[0.2px]"
         />
 
-        {/* Soft readability overlay */}
-        {/* <div aria-hidden="true" className="absolute inset-0 bg-white/10" /> */}
-
-        {/* Message content */}
+        {/* Message history */}
         <div
           className={cn(
-            "relative z-10 h-full overflow-y-auto px-5 py-4",
+            "relative z-10 min-h-0 flex-1 overflow-y-auto px-5 py-4",
             "scrollbar-thin",
             "[scrollbar-color:#C4C4C4_transparent]",
             "[&::-webkit-scrollbar]:w-1.5",
@@ -335,51 +336,54 @@ export function ConversationWorkspace() {
 
           {messages ? <MessageHistory messages={messages} /> : null}
         </div>
+
+        {/* Reply composer — floats over the wallpaper */}
+        <form
+          onSubmit={handleSubmit}
+          className="relative z-20 shrink-0 bg-transparent px-5 py-3"
+        >
+          {sendError ? (
+            <p
+              role="alert"
+              className="mb-2 text-[13px] leading-5 text-[#C94B4B]"
+            >
+              {sendError}
+            </p>
+          ) : null}
+
+          <div className="flex items-end gap-2">
+            <label className="sr-only" htmlFor="conversation-reply">
+              Reply to {selectedConversation.employee.fullName}
+            </label>
+
+            <textarea
+              id="conversation-reply"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={canReply ? "Type a reply" : "Reply unavailable"}
+              disabled={!canReply || isSending}
+              rows={1}
+              maxLength={2000}
+              className="max-h-28 min-h-11 flex-1 resize-none rounded-[22px] border border-[#D9E0E7] bg-white px-4 py-2.5 text-[14px] leading-5 text-[#172033] shadow-[0_1px_3px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)] outline-none placeholder:text-[#687586] focus:border-[#3F80E0] focus:ring-2 focus:ring-[#3F80E0]/20 disabled:cursor-not-allowed disabled:bg-[#F1F4F7]"
+            />
+
+            <button
+              type="submit"
+              disabled={!canReply || !draft.trim() || isSending}
+              aria-label="Send reply"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#0057B8] text-white shadow-[0_1px_3px_rgba(0,0,0,0.15)] transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#3F80E0] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <SendHorizontal className="size-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          {!canReply ? (
+            <p className="mt-2 text-[13px] leading-5 text-[#687586]">
+              Replies are available when this escalation is assigned to you.
+            </p>
+          ) : null}
+        </form>
       </div>
-
-      {/* Reply composer */}
-      <form
-        onSubmit={handleSubmit}
-        className="shrink-0 border-t border-[#E3E8EE] bg-white px-5 py-3"
-      >
-        {sendError ? (
-          <p role="alert" className="mb-2 text-[13px] leading-5 text-[#C94B4B]">
-            {sendError}
-          </p>
-        ) : null}
-
-        <div className="flex items-end gap-2">
-          <label className="sr-only" htmlFor="conversation-reply">
-            Reply to {selectedConversation.employee.fullName}
-          </label>
-
-          <textarea
-            id="conversation-reply"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={canReply ? "Type a reply" : "Reply unavailable"}
-            disabled={!canReply || isSending}
-            rows={1}
-            maxLength={2000}
-            className="max-h-28 min-h-11 flex-1 resize-y rounded-xl border border-[#D9E0E7] bg-white px-3 py-2.5 text-[14px] leading-5 text-[#172033] outline-none placeholder:text-[#687586] focus:border-[#3F80E0] focus:ring-2 focus:ring-[#3F80E0]/20 disabled:cursor-not-allowed disabled:bg-[#F1F4F7]"
-          />
-
-          <button
-            type="submit"
-            disabled={!canReply || !draft.trim() || isSending}
-            aria-label="Send reply"
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#0057B8] text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#3F80E0] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <SendHorizontal className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        {!canReply ? (
-          <p className="mt-2 text-[13px] leading-5 text-[#687586]">
-            Replies are available when this escalation is assigned to you.
-          </p>
-        ) : null}
-      </form>
     </div>
   );
 }
@@ -409,14 +413,17 @@ function MessageHistory({ messages }: { messages: ConversationMessage[] }) {
     <div className="mx-auto flex w-full max-w-5xl flex-col">
       {messages.map((message, index) => {
         const isEmployeeMessage = message.direction === "INBOUND";
+
         const isHrMessage =
           message.direction === "OUTBOUND" &&
           Boolean(message.sentByHrOfficerId);
+
         const previousMessage = messages[index - 1];
 
         const previousSenderKey = previousMessage
           ? (previousMessage.sentByHrOfficerId ?? previousMessage.direction)
           : null;
+
         const currentSenderKey = message.sentByHrOfficerId ?? message.direction;
 
         const senderChanged =
