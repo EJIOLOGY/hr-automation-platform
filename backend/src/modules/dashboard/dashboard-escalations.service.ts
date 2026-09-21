@@ -210,7 +210,12 @@ export class DashboardEscalationsService {
           },
         },
         assignedHrOfficer: {
-          select: { id: true, fullName: true, email: true, role: true },
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            role: true,
+          },
         },
         session: {
           select: {
@@ -287,7 +292,12 @@ export class DashboardEscalationsService {
             },
           },
           assignedHrOfficer: {
-            select: { id: true, fullName: true, email: true, role: true },
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              role: true,
+            },
           },
           session: {
             select: {
@@ -374,8 +384,10 @@ export class DashboardEscalationsService {
 
     await this.escalationService.closeEscalation(id);
 
+    // Closing is backend/audit only. The employee already received the
+    // resolution message and feedback prompt when the escalation was resolved.
     const updated = await this.prisma.$transaction(async (tx) => {
-      const updatedEscalation = await tx.escalation.update({
+      return tx.escalation.update({
         where: { id },
         data: {
           resolutionNote: resolutionNote ?? undefined,
@@ -395,7 +407,12 @@ export class DashboardEscalationsService {
             },
           },
           assignedHrOfficer: {
-            select: { id: true, fullName: true, email: true, role: true },
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              role: true,
+            },
           },
           session: {
             select: {
@@ -407,8 +424,6 @@ export class DashboardEscalationsService {
           },
         },
       });
-
-      return updatedEscalation;
     });
 
     await this.auditService.log({
@@ -450,7 +465,7 @@ export class DashboardEscalationsService {
   private buildResolutionMessage(fullName: string): string {
     const firstName = fullName.trim().split(/\s+/)[0] || 'there';
 
-    return `Hi ${firstName}, your HR request has been resolved. Thank you for contacting HR.\n\n**How was your experience?**\n\nPlease rate your experience from **1 to 5**, and optionally tell us why.\n\n*Reply like:*\n**5 — HR was very helpful.**`;
+    return `Hi ${firstName}, your HR request has been resolved. Thank you for contacting HR.\n\n*How was your experience?*\n\nPlease rate your experience from *1 to 5*, and optionally tell us why.\n\n*Reply like:*\n*5 — HR was very helpful.*`;
   }
 
   private normalizeLimit(value?: number) {

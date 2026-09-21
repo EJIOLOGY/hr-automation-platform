@@ -143,6 +143,29 @@ function ConversationListItem({
   );
 }
 
+function getLatestConversationPerEmployee(conversations: Conversation[]) {
+  const latestByEmployee = new Map<string, Conversation>();
+
+  for (const conversation of conversations) {
+    const employeeId = conversation.employee.id;
+    const existing = latestByEmployee.get(employeeId);
+
+    if (
+      !existing ||
+      new Date(conversation.lastActivityAt).getTime() >
+        new Date(existing.lastActivityAt).getTime()
+    ) {
+      latestByEmployee.set(employeeId, conversation);
+    }
+  }
+
+  return Array.from(latestByEmployee.values()).sort(
+    (a, b) =>
+      new Date(b.lastActivityAt).getTime() -
+      new Date(a.lastActivityAt).getTime(),
+  );
+}
+
 export function ConversationList() {
   const searchParams = useSearchParams();
   const conversationId = searchParams.get("conversationId");
@@ -264,26 +287,32 @@ export function ConversationList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
+  const uniqueConversations = useMemo(
+    () =>
+      conversations ? getLatestConversationPerEmployee(conversations) : [],
+    [conversations],
+  );
+
   useEffect(() => {
     if (!conversationId || !conversations) {
       return;
     }
 
-    const conversation = conversations.find(
+    const conversation = uniqueConversations.find(
       (item) => item.id === conversationId,
     );
 
     if (conversation) {
       selectConversation(conversation);
     }
-  }, [conversationId, conversations, selectConversation]);
+  }, [conversationId, conversations, selectConversation, uniqueConversations]);
 
   const visibleConversations = useMemo(() => {
     if (!conversations) return [];
 
     const normalizedQuery = query.trim().toLocaleLowerCase();
 
-    return conversations.filter((conversation) => {
+    return uniqueConversations.filter((conversation) => {
       const matchesQuery =
         !normalizedQuery ||
         [
@@ -299,7 +328,7 @@ export function ConversationList() {
 
       return matchesQuery && matchesFilter;
     });
-  }, [conversations, filter, query]);
+  }, [conversations, filter, query, uniqueConversations]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">

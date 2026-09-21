@@ -201,7 +201,7 @@ describe('DashboardEscalationsService', () => {
       expect.objectContaining({
         type: 'text',
         text: expect.stringContaining(
-          'Please rate your experience from **1 to 5**',
+          'Please rate your experience from *1 to 5*',
         ),
       }),
     );

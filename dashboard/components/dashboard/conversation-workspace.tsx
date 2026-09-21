@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AlertTriangle,
@@ -23,6 +23,17 @@ import { cn } from "@/lib/utils";
 import { useConversationSelection } from "./conversation-context";
 import { useRealtime } from "./realtime-provider";
 
+const COMPOSER_MIN_HEIGHT = 44;
+const COMPOSER_MAX_HEIGHT = 112;
+
+function resizeComposer(textarea: HTMLTextAreaElement) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(
+    Math.max(textarea.scrollHeight, COMPOSER_MIN_HEIGHT),
+    COMPOSER_MAX_HEIGHT,
+  )}px`;
+}
+
 export function ConversationWorkspace() {
   const { selectedConversation } = useConversationSelection();
   const { accessToken, refreshAuth, user } = useAuth();
@@ -34,6 +45,8 @@ export function ConversationWorkspace() {
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const messageHistoryRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const { joinConversation, leaveConversation, on } = useRealtime();
 
   const selectedConversationId = selectedConversation?.id ?? null;
@@ -134,6 +147,39 @@ export function ConversationWorkspace() {
       active = false;
     };
   }, [accessToken, refreshAuth, retryCount, selectedConversation]);
+
+  // Keep the conversation viewport at the latest message after the initial
+  // load, a realtime refresh, or an HR message sent from the composer.
+  useEffect(() => {
+    const container = messageHistoryRef.current;
+
+    if (!container || messages === null) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [messages, selectedConversationId]);
+
+  // Reset the composer height whenever its controlled value is cleared,
+  // such as after sending a message or switching conversations.
+  useEffect(() => {
+    if (!composerRef.current) {
+      return;
+    }
+
+    if (!draft) {
+      composerRef.current.style.height = `${COMPOSER_MIN_HEIGHT}px`;
+      return;
+    }
+
+    resizeComposer(composerRef.current);
+  }, [draft]);
 
   // Silent refresh: a new message arrived for the open conversation. Fetch
   // quietly and append/replace without flashing the loading skeleton —
@@ -283,6 +329,7 @@ export function ConversationWorkspace() {
 
         {/* Message history */}
         <div
+          ref={messageHistoryRef}
           className={cn(
             "relative z-10 min-h-0 flex-1 overflow-y-auto px-5 py-4",
             "scrollbar-thin",
@@ -357,14 +404,22 @@ export function ConversationWorkspace() {
             </label>
 
             <textarea
+              ref={composerRef}
               id="conversation-reply"
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={canReply ? "Type a reply" : "Reply unavailable"}
+              onChange={(event) => {
+                resizeComposer(event.currentTarget);
+                setDraft(event.target.value);
+              }}
+              placeholder={
+                canReply
+                  ? "Type a reply"
+                  : " Replies are only available when this escalation is assigned to you...."
+              }
               disabled={!canReply || isSending}
               rows={1}
               maxLength={2000}
-              className="max-h-28 min-h-11 flex-1 resize-none rounded-[22px] border border-[#D9E0E7] bg-white px-4 py-2.5 text-[14px] leading-5 text-[#172033] shadow-[0_1px_3px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)] outline-none placeholder:text-[#687586] focus:border-[#3F80E0] focus:ring-2 focus:ring-[#3F80E0]/20 disabled:cursor-not-allowed disabled:bg-[#F1F4F7]"
+              className="max-h-28 min-h-11 flex-1 resize-none overflow-y-auto rounded-[22px] border border-[#D9E0E7] bg-white px-4 py-2.5 text-[14px] leading-5 text-[#172033] shadow-[0_1px_3px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)] outline-none placeholder:text-[#687586] focus:border-[#3F80E0] focus:ring-2 focus:ring-[#3F80E0]/20 disabled:cursor-not-allowed disabled:bg-[#F1F4F7]"
             />
 
             <button
@@ -376,12 +431,7 @@ export function ConversationWorkspace() {
               <SendHorizontal className="size-4" aria-hidden="true" />
             </button>
           </div>
-
-          {!canReply ? (
-            <p className="mt-2 text-[13px] leading-5 text-[#687586]">
-              Replies are available when this escalation is assigned to you.
-            </p>
-          ) : null}
+          
         </form>
       </div>
     </div>
