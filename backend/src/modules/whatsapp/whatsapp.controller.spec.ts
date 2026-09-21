@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +8,8 @@ import { WhatsappGraphClient } from './whatsapp-graph-client.service';
 
 describe('WhatsappController', () => {
   let controller: WhatsappController;
+
+  const appSecret = 'test-app-secret';
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -105,15 +108,35 @@ describe('WhatsappController', () => {
       ],
     });
 
+    const buildSignedRequest = (payload: unknown) => {
+      const rawBody = Buffer.from(JSON.stringify(payload));
+      const signature = `sha256=${createHmac('sha256', appSecret)
+        .update(rawBody)
+        .digest('hex')}`;
+
+      return {
+        rawBody,
+        header: jest.fn().mockReturnValue(signature),
+      };
+    };
+
+    const buildController = (
+      handleInbound: jest.Mock,
+      sendMessages: jest.Mock,
+    ) =>
+      new WhatsappController(
+        { handleInbound } as any,
+        { sendMessages } as any,
+        {
+          get: jest.fn().mockReturnValue(appSecret),
+        } as any,
+      );
+
     it('unwraps the Meta webhook envelope and passes the inbound message to the service', async () => {
       const handleInbound = jest.fn().mockResolvedValue([]);
       const sendMessages = jest.fn();
 
-      const testController = new WhatsappController(
-        { handleInbound } as any,
-        { sendMessages } as any,
-        { get: jest.fn() } as any,
-      );
+      const testController = buildController(handleInbound, sendMessages);
 
       const message = {
         from: '2348000000000',
@@ -123,8 +146,12 @@ describe('WhatsappController', () => {
         text: { body: 'Hello' },
       };
 
+      const payload = buildMetaPayload(message);
+      const request = buildSignedRequest(payload);
+
       const result = await testController.receiveWebhook(
-        buildMetaPayload(message),
+        request as any,
+        payload,
       );
 
       expect(handleInbound).toHaveBeenCalledTimes(1);
@@ -137,11 +164,7 @@ describe('WhatsappController', () => {
       const handleInbound = jest.fn().mockResolvedValue(replies);
       const sendMessages = jest.fn();
 
-      const testController = new WhatsappController(
-        { handleInbound } as any,
-        { sendMessages } as any,
-        { get: jest.fn() } as any,
-      );
+      const testController = buildController(handleInbound, sendMessages);
 
       const message = {
         from: '2348000000000',
@@ -151,7 +174,10 @@ describe('WhatsappController', () => {
         text: { body: 'Hello' },
       };
 
-      await testController.receiveWebhook(buildMetaPayload(message));
+      const payload = buildMetaPayload(message);
+      const request = buildSignedRequest(payload);
+
+      await testController.receiveWebhook(request as any, payload);
 
       expect(sendMessages).toHaveBeenCalledTimes(1);
       expect(sendMessages).toHaveBeenCalledWith('2348000000000', replies);
@@ -161,11 +187,7 @@ describe('WhatsappController', () => {
       const handleInbound = jest.fn().mockResolvedValue([]);
       const sendMessages = jest.fn();
 
-      const testController = new WhatsappController(
-        { handleInbound } as any,
-        { sendMessages } as any,
-        { get: jest.fn() } as any,
-      );
+      const testController = buildController(handleInbound, sendMessages);
 
       const message = {
         from: '2348000000000',
@@ -175,7 +197,10 @@ describe('WhatsappController', () => {
         text: { body: 'Hello' },
       };
 
-      await testController.receiveWebhook(buildMetaPayload(message));
+      const payload = buildMetaPayload(message);
+      const request = buildSignedRequest(payload);
+
+      await testController.receiveWebhook(request as any, payload);
 
       expect(sendMessages).not.toHaveBeenCalled();
     });
@@ -184,13 +209,9 @@ describe('WhatsappController', () => {
       const handleInbound = jest.fn();
       const sendMessages = jest.fn();
 
-      const testController = new WhatsappController(
-        { handleInbound } as any,
-        { sendMessages } as any,
-        { get: jest.fn() } as any,
-      );
+      const testController = buildController(handleInbound, sendMessages);
 
-      const result = await testController.receiveWebhook({
+      const payload = {
         object: 'whatsapp_business_account',
         entry: [
           {
@@ -198,7 +219,14 @@ describe('WhatsappController', () => {
             changes: [{ field: 'messages', value: { statuses: [] } }],
           },
         ],
-      });
+      };
+
+      const request = buildSignedRequest(payload);
+
+      const result = await testController.receiveWebhook(
+        request as any,
+        payload,
+      );
 
       expect(handleInbound).not.toHaveBeenCalled();
       expect(sendMessages).not.toHaveBeenCalled();
@@ -209,17 +237,106 @@ describe('WhatsappController', () => {
       const handleInbound = jest.fn();
       const sendMessages = jest.fn();
 
-      const testController = new WhatsappController(
-        { handleInbound } as any,
-        { sendMessages } as any,
-        { get: jest.fn() } as any,
-      );
+      const testController = buildController(handleInbound, sendMessages);
 
-      const result = await testController.receiveWebhook({ foo: 'bar' });
+      const payload = { foo: 'bar' };
+      const request = buildSignedRequest(payload);
+
+      const result = await testController.receiveWebhook(
+        request as any,
+        payload,
+      );
 
       expect(handleInbound).not.toHaveBeenCalled();
       expect(sendMessages).not.toHaveBeenCalled();
       expect(result).toEqual({ received: true });
+    });
+
+    it('rejects webhook requests without a signature', async () => {
+      const handleInbound = jest.fn();
+      const sendMessages = jest.fn();
+
+      const testController = buildController(handleInbound, sendMessages);
+
+      const payload = { foo: 'bar' };
+      const rawBody = Buffer.from(JSON.stringify(payload));
+
+      const request = {
+        rawBody,
+        header: jest.fn().mockReturnValue(undefined),
+      };
+
+      await expect(
+        testController.receiveWebhook(request as any, payload),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(handleInbound).not.toHaveBeenCalled();
+      expect(sendMessages).not.toHaveBeenCalled();
+    });
+
+    it('rejects webhook requests with an invalid signature', async () => {
+      const handleInbound = jest.fn();
+      const sendMessages = jest.fn();
+
+      const testController = buildController(handleInbound, sendMessages);
+
+      const payload = { foo: 'bar' };
+      const rawBody = Buffer.from(JSON.stringify(payload));
+
+      const request = {
+        rawBody,
+        header: jest.fn().mockReturnValue('sha256=invalid-signature'),
+      };
+
+      await expect(
+        testController.receiveWebhook(request as any, payload),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(handleInbound).not.toHaveBeenCalled();
+      expect(sendMessages).not.toHaveBeenCalled();
+    });
+
+    it('rejects webhook requests when the app secret is not configured', async () => {
+      const handleInbound = jest.fn();
+      const sendMessages = jest.fn();
+
+      const testController = new WhatsappController(
+        { handleInbound } as any,
+        { sendMessages } as any,
+        {
+          get: jest.fn().mockReturnValue(undefined),
+        } as any,
+      );
+
+      const payload = { foo: 'bar' };
+      const request = buildSignedRequest(payload);
+
+      await expect(
+        testController.receiveWebhook(request as any, payload),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(handleInbound).not.toHaveBeenCalled();
+      expect(sendMessages).not.toHaveBeenCalled();
+    });
+
+    it('rejects webhook requests when the raw body is unavailable', async () => {
+      const handleInbound = jest.fn();
+      const sendMessages = jest.fn();
+
+      const testController = buildController(handleInbound, sendMessages);
+
+      const payload = { foo: 'bar' };
+
+      const request = {
+        header: jest.fn().mockReturnValue('sha256=some-signature'),
+      };
+
+      await expect(
+        testController.receiveWebhook(request as any, payload),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(handleInbound).not.toHaveBeenCalled();
+      expect(sendMessages).not.toHaveBeenCalled();
     });
   });
 });

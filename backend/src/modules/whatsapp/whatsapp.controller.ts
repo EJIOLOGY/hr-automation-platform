@@ -6,8 +6,11 @@ import {
   HttpCode,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHmac, timingSafeEqual } from 'crypto';
+import type { Request } from 'express';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappGraphClient } from './whatsapp-graph-client.service';
 import type { WhatsappInboundMessage } from './whatsapp-message.mapper';
@@ -43,7 +46,12 @@ export class WhatsappController {
 
   @Post('webhook')
   @HttpCode(200)
-  async receiveWebhook(@Body() payload: unknown) {
+  async receiveWebhook(
+    @Req() request: Request & { rawBody?: Buffer },
+    @Body() payload: unknown,
+  ) {
+    this.verifyWebhookSignature(request);
+
     // Meta can send non-message events such as delivery/read/status updates,
     // and always wraps real messages under entry[].changes[].value.messages.
     // Ignore anything that doesn't contain inbound messages.
@@ -56,6 +64,34 @@ export class WhatsappController {
     }
 
     return { received: true };
+  }
+
+  private verifyWebhookSignature(
+    request: Request & { rawBody?: Buffer },
+  ): void {
+    const appSecret = this.configService.get<string>('WHATSAPP_APP_SECRET');
+    const signature = request.header('X-Hub-Signature-256');
+    const rawBody = request.rawBody;
+
+    if (!appSecret || !signature || !rawBody) {
+      throw new ForbiddenException();
+    }
+
+    const expectedSignature = createHmac('sha256', appSecret)
+      .update(rawBody)
+      .digest('hex');
+
+    const receivedSignature = signature.replace(/^sha256=/, '');
+
+    if (
+      receivedSignature.length !== expectedSignature.length ||
+      !timingSafeEqual(
+        Buffer.from(receivedSignature, 'utf8'),
+        Buffer.from(expectedSignature, 'utf8'),
+      )
+    ) {
+      throw new ForbiddenException();
+    }
   }
 }
 
