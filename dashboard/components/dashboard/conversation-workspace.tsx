@@ -419,7 +419,7 @@ export function ConversationWorkspace() {
               disabled={!canReply || isSending}
               rows={1}
               maxLength={2000}
-              className="max-h-28 min-h-11 flex-1 resize-none overflow-y-auto rounded-[22px] border border-[#D9E0E7] bg-white px-4 py-2.5 text-[14px] leading-5 text-[#172033] shadow-[0_1px_3px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)] outline-none placeholder:text-[#687586] focus:border-[#3F80E0] focus:ring-2 focus:ring-[#3F80E0]/20 disabled:cursor-not-allowed disabled:bg-[#F1F4F7]"
+              className="composer-scrollbar max-h-28 min-h-11 flex-1 resize-none overflow-y-auto rounded-[22px] border border-[#D9E0E7] bg-white px-4 py-2.5 text-[14px] leading-5 text-[#172033] shadow-[0_1px_3px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)] outline-none placeholder:text-[#687586] focus:border-[#3F80E0] focus:ring-2 focus:ring-[#3F80E0]/20 disabled:cursor-not-allowed disabled:bg-[#F1F4F7]"
             />
 
             <button
@@ -431,7 +431,6 @@ export function ConversationWorkspace() {
               <SendHorizontal className="size-4" aria-hidden="true" />
             </button>
           </div>
-          
         </form>
       </div>
     </div>

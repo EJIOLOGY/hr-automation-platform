@@ -526,4 +526,45 @@
   .border-neutral {
     border-color: var(--neutral);
   }
+  /* ============================================================
+ * TERTIARY CONVERSATION COMPOSER SCROLLBAR
+ * ============================================================ */
+
+  .composer-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #c4c4c4 transparent;
+  }
+
+  .composer-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .composer-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .composer-scrollbar::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: #c4c4c4;
+  }
+
+  .composer-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+  }
+
+  /* Remove native scrollbar arrow/button controls completely. */
+  .composer-scrollbar::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  .composer-scrollbar::-webkit-scrollbar-button:vertical:start:decrement,
+  .composer-scrollbar::-webkit-scrollbar-button:vertical:end:increment,
+  .composer-scrollbar::-webkit-scrollbar-button:vertical:decrement,
+  .composer-scrollbar::-webkit-scrollbar-button:vertical:increment {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
 }
