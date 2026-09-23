@@ -38,6 +38,7 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
+  @UseGuards(ThrottlerGuard)
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -53,6 +54,7 @@ export class AuthController {
     };
   }
 
+  @UseGuards(ThrottlerGuard)
   @Post('refresh')
   async refresh(
     @Req() request: Request,
