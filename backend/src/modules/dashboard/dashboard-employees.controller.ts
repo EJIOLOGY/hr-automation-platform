@@ -18,9 +18,12 @@ import { createReadStream } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
+import { HrOfficerRole } from '../../generated/prisma/enums';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 import { EmployeeImportParseError } from '../employee/employee-import.parser';
 import { EmployeeImportReportService } from '../employee/employee-import-report.service';
@@ -38,7 +41,8 @@ const FAILED_ROWS_REPORT_PATTERN =
   /^failed-employee-rows-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.xlsx$/;
 
 @Controller('dashboard/employees')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(HrOfficerRole.ADMIN)
 export class DashboardEmployeesController {
   constructor(
     private readonly employeeImportService: EmployeeImportService,
