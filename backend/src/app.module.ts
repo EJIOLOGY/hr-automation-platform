@@ -18,6 +18,7 @@ import { PolicyModule } from './modules/policy/policy.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { PayslipModule } from './modules/payslip/payslip.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     AuditModule,
     HealthModule,
     AnalyticsModule,
+    PayslipModule,
   ],
   controllers: [AppController],
   providers: [AppService],
