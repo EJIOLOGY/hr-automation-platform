@@ -30,18 +30,28 @@ export class BillingRateController {
       fileFilter: (_request, file, callback) => {
         const accepted =
           file.originalname.toLowerCase().endsWith('.xlsx') ||
-          file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        callback(accepted ? null : new BadRequestException('Only .xlsx Billing Rate files are supported.'), accepted);
+          file.mimetype ===
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        callback(
+          accepted
+            ? null
+            : new BadRequestException(
+                'Only .xlsx Billing Rate files are supported.',
+              ),
+          accepted,
+        );
       },
     }),
   )
   async importBillingRate(
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Query('accountingCompanyId', new ParseUUIDPipe()) accountingCompanyId: string,
+    @Query('accountingCompanyId', new ParseUUIDPipe())
+    accountingCompanyId: string,
     @Query('payrollPeriodId', new ParseUUIDPipe()) payrollPeriodId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (!file) throw new BadRequestException('Billing Rate .xlsx file is required.');
+    if (!file)
+      throw new BadRequestException('Billing Rate .xlsx file is required.');
 
     return this.billingRateService.importWorkbook(
       file.buffer,

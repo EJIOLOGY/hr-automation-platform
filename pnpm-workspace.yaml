@@ -5,6 +5,7 @@ allowBuilds:
   '@prisma/engines': true
   bcrypt: true
   prisma: true
+  puppeteer: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - '@next/env@16.3.2'

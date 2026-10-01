@@ -11,6 +11,8 @@ import { LeaveService } from '../leave/leave.service';
 import { HrDocumentRequestService } from '../verification/hr-document-request.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AnalyticsEventType, Prisma } from '../../generated/prisma/client';
+import { WhatsAppPayslipService } from '../payslip/whatsapp/whatsapp-payslip.service';
+import { Optional } from '@nestjs/common';
 import type {
   ConversationResponse,
   InboundConversationMessage,
@@ -28,6 +30,7 @@ export class ConversationService {
     private readonly leaveService: LeaveService,
     private readonly hrDocumentRequestService: HrDocumentRequestService,
     private readonly analyticsService: AnalyticsService,
+    @Optional() private readonly payslipService?: WhatsAppPayslipService,
   ) {}
 
   /**
@@ -248,6 +251,7 @@ export class ConversationService {
       case 'MAIN_MENU':
         return this.handleMainMenuSelection(
           employee.id,
+          employee.employeeNumber,
           session.id,
           selection,
           message,
@@ -302,6 +306,16 @@ export class ConversationService {
           selection,
         );
 
+      case 'PAYSLIP_PENDING':
+        // Wait for next step (PDF download) to be implemented later.
+        // For now, any input other than back/menu will just return unknown.
+        return this.escalateToHr(
+          employee.id,
+          session.id,
+          session.currentState,
+          'Unknown conversation state encountered.',
+        );
+
       default:
         return this.escalateToHr(
           employee.id,
@@ -321,6 +335,7 @@ export class ConversationService {
    */
   private async handleMainMenuSelection(
     employeeId: string,
+    employeeNumber: string | null,
     sessionId: string,
     selection: string,
     rawInput: string,
@@ -379,6 +394,44 @@ export class ConversationService {
           'VERIFICATION_MENU',
           MENU_IDS.VERIFICATION,
         );
+
+      case 'open_payslip': {
+        if (!this.payslipService) {
+          return this.createResponse(sessionId, 'MAIN_MENU', 'payslip_unavailable');
+        }
+        
+        const employee = await this.employeeService.findById(employeeId);
+        if (!employee || !employee.employeeNumber) {
+          return this.createResponse(sessionId, 'MAIN_MENU', 'employee_not_found');
+        }
+
+        const payslip = await this.payslipService.getLatestApprovedPayslip(employee.employeeNumber);
+        
+        if (!payslip) {
+          return this.buildPostServiceCompletionResponse(
+            sessionId,
+            'open_payslip',
+            'Your payslip is not yet available. Please check back after the payroll period is approved.'
+          );
+        }
+
+        const msg = this.payslipService.formatPayslipMessage(payslip, {
+          month: payslip.month,
+          year: payslip.year,
+        });
+
+        await this.chatSessionService.updateState(sessionId, 'PAYSLIP_PENDING');
+
+        return {
+          success: true,
+          sessionId,
+          state: 'PAYSLIP_PENDING',
+          action: 'open_payslip',
+          message: msg,
+          replies: [{ type: 'text', text: msg }],
+          escalationAvailable: true,
+        };
+      }
 
       default:
         return this.handleUnknownSelection(

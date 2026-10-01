@@ -55,6 +55,46 @@ enum AnalyticsEventType {
   UNRECOGNIZED_INPUT
 }
 
+enum PayrollPeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum BillingRateUploadStatus {
+  UPLOADED
+  VALIDATED
+  REJECTED
+  APPROVED
+}
+
+enum PayslipBatchStatus {
+  DRAFT
+  CALCULATED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum PayslipStatus {
+  CALCULATED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum AllowanceClass {
+  PAYSLIP_MAPPED_TAXABLE
+  PAYSLIP_MAPPED_NONTAXABLE
+  IGNORED
+  MANUAL
+  UNMAPPED
+}
+
+enum PayslipLineKind {
+  BASE
+  ARREARS
+}
+
 model Employee {
   id             String         @id @default(uuid())
   employeeNumber String         @unique
@@ -67,6 +107,8 @@ model Employee {
   sessions    ChatSession[]
   escalations Escalation[]
   analyticsEvents AnalyticsEvent[]
+  billingRateRows BillingRateRow[]
+  payslips        Payslip[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -89,6 +131,9 @@ model HrOfficer {
   assignedEscalations Escalation[] @relation("EscalationAssignee")
   sentMessages        ChatMessage[] @relation("HrOfficerMessages")
   auditLogs           AuditLog[]
+  billingRateUploads    BillingRateUpload[] @relation("BillingRateUploads")
+  payslipBatchesCreated PayslipBatch[] @relation("PayslipBatchesCreated")
+  approvedPayslipBatches PayslipBatch[] @relation("PayslipBatchesApproved")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -246,4 +291,230 @@ model Feedback {
 
   @@index([sessionId])
   @@index([createdAt])
+}
+
+model AccountingCompany {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  code     String  @unique
+  isActive Boolean @default(true)
+
+  payrollPeriods     PayrollPeriod[]
+  billingRateUploads BillingRateUpload[]
+  payslipBatches     PayslipBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+model PayrollPeriod {
+  id                  String            @id @default(uuid())
+  accountingCompanyId String
+  accountingCompany   AccountingCompany @relation(fields: [accountingCompanyId], references: [id], onDelete: Restrict)
+
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  month     String?
+  year      Int?
+  status    PayrollPeriodStatus @default(OPEN)
+
+  billingRateUploads BillingRateUpload[]
+  payslipBatches     PayslipBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountingCompanyId, startDate, endDate])
+  @@index([accountingCompanyId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model BillingRateUpload {
+  id                  String                @id @default(uuid())
+  accountingCompanyId String
+  accountingCompany   AccountingCompany     @relation(fields: [accountingCompanyId], references: [id], onDelete: Restrict)
+  payrollPeriodId     String
+  payrollPeriod       PayrollPeriod         @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+
+  version        Int
+  status         BillingRateUploadStatus @default(UPLOADED)
+  fileName       String
+  sourceFileHash String?
+  uploadedById   String
+  uploadedBy     HrOfficer @relation("BillingRateUploads", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  rowCount        Int @default(0)
+  validRowCount   Int @default(0)
+  invalidRowCount Int @default(0)
+
+  rows           BillingRateRow[]
+  payslipBatches PayslipBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountingCompanyId, payrollPeriodId, version])
+  @@index([accountingCompanyId, payrollPeriodId])
+  @@index([status])
+  @@index([uploadedById])
+  @@index([createdAt])
+}
+
+model BillingRateRow {
+  id                  String            @id @default(uuid())
+  billingRateUploadId String
+  billingRateUpload   BillingRateUpload @relation(fields: [billingRateUploadId], references: [id], onDelete: Cascade)
+
+  rowNumber  Int
+  staffId    String
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  rawData          Json
+  normalizedData   Json?
+  validationErrors Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payslips Payslip[]
+
+  @@unique([billingRateUploadId, rowNumber])
+  @@index([staffId])
+  @@index([employeeId])
+  @@index([billingRateUploadId])
+}
+
+model PayslipBatch {
+  id                  String            @id @default(uuid())
+  accountingCompanyId String
+  accountingCompany   AccountingCompany @relation(fields: [accountingCompanyId], references: [id], onDelete: Restrict)
+  payrollPeriodId     String
+  payrollPeriod       PayrollPeriod     @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  billingRateUploadId String
+  billingRateUpload   BillingRateUpload @relation(fields: [billingRateUploadId], references: [id], onDelete: Restrict)
+
+  version     Int
+  status      PayslipBatchStatus @default(DRAFT)
+  createdById String
+  createdBy   HrOfficer @relation("PayslipBatchesCreated", fields: [createdById], references: [id], onDelete: Restrict)
+
+  calculatedAt DateTime?
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   HrOfficer? @relation("PayslipBatchesApproved", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  payslips Payslip[]
+  reviewWorkbooks ReviewWorkbook[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountingCompanyId, payrollPeriodId, version])
+  @@index([accountingCompanyId, payrollPeriodId])
+  @@index([billingRateUploadId])
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model Payslip {
+  id               String         @id @default(uuid())
+  payslipBatchId   String
+  payslipBatch     PayslipBatch   @relation(fields: [payslipBatchId], references: [id], onDelete: Cascade)
+  billingRateRowId String
+  billingRateRow   BillingRateRow @relation(fields: [billingRateRowId], references: [id], onDelete: Restrict)
+
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  staffId String
+  status  PayslipStatus @default(CALCULATED)
+
+  calculationInputs  Json
+  calculationOutputs Json
+  reviewData         Json?
+
+  reviewedAt DateTime?
+  approvedAt DateTime?
+
+  lines PayslipLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([payslipBatchId, staffId])
+  @@index([staffId])
+  @@index([employeeId])
+  @@index([billingRateRowId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AllowanceDefinition {
+  id                   String         @id @default(uuid())
+  canonicalName        String         @unique
+  sourceSheet          String
+  sourceHeader         String
+  classification       AllowanceClass
+  affectsGrossEarnings Boolean        @default(false)
+  affectsNetServiceFee Boolean        @default(false)
+  supportsArrears      Boolean        @default(false)
+  displayLabel         String
+  sortOrder            Int            @default(0)
+  effectiveFrom        DateTime       @default(now())
+
+  lines PayslipLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([classification])
+  @@index([canonicalName])
+}
+
+model PayslipLine {
+  id                    String              @id @default(uuid())
+  payslipId             String
+  payslip               Payslip             @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  allowanceDefinitionId String?
+  allowanceDefinition   AllowanceDefinition? @relation(fields: [allowanceDefinitionId], references: [id], onDelete: SetNull)
+
+  name         String
+  kind         PayslipLineKind
+  parentLineId String?
+  parentLine   PayslipLine?        @relation("LineArrears", fields: [parentLineId], references: [id], onDelete: SetNull)
+  childLines   PayslipLine[]       @relation("LineArrears")
+
+  amount     Decimal        @db.Decimal(18, 4)
+  taxClass   AllowanceClass
+  sortOrder  Int            @default(0)
+  sourceCell String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([payslipId])
+  @@index([allowanceDefinitionId])
+  @@index([parentLineId])
+}
+
+model ReviewWorkbook {
+  id             String       @id @default(uuid())
+  payslipBatchId String
+  payslipBatch   PayslipBatch @relation(fields: [payslipBatchId], references: [id], onDelete: Cascade)
+
+  exportHash   String    @unique
+  exportedAt   DateTime  @default(now())
+  reuploadedAt DateTime?
+  diff         Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([payslipBatchId])
 }

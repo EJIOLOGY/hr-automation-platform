@@ -6,6 +6,10 @@ import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalize
 export class EmployeeService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findById(id: string) {
+    return this.prisma.employee.findUnique({ where: { id } });
+  }
+
   async findByPhoneNumber(phoneNumber: string) {
     const normalizedPhoneNumber = PhoneNumberNormalizer.normalize(phoneNumber);
 

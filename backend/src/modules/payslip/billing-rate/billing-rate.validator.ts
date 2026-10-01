@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { ParsedBillingRateWorkbook, ParsedBillingRateRow } from './billing-rate.parser';
+import type {
+  ParsedBillingRateWorkbook,
+  ParsedBillingRateRow,
+} from './billing-rate.parser';
 
 @Injectable()
 export class BillingRateValidator {
@@ -9,7 +12,10 @@ export class BillingRateValidator {
     for (const row of workbook.rows) {
       if (!row.staffId) continue;
       if (seen.has(row.staffId)) {
-        row.validationErrors.push({ field: 'staffId', message: `Duplicate Staff ID "${row.staffId}".` });
+        row.validationErrors.push({
+          field: 'staffId',
+          message: `Duplicate Staff ID "${row.staffId}".`,
+        });
       }
       seen.add(row.staffId);
     }

@@ -11,6 +11,8 @@ import { VerificationModule } from '../verification/verification.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { CONVERSATION_PORT } from './conversation.contracts';
 
+import { WhatsAppPayslipModule } from '../payslip/whatsapp/whatsapp-payslip.module';
+
 @Module({
   imports: [
     EmployeeModule,
@@ -21,6 +23,7 @@ import { CONVERSATION_PORT } from './conversation.contracts';
     LeaveModule,
     VerificationModule,
     AnalyticsModule,
+    WhatsAppPayslipModule,
   ],
   providers: [
     ConversationService,

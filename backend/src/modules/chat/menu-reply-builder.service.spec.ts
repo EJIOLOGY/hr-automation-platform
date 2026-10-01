@@ -73,6 +73,7 @@ describe('MenuReplyBuilderService', () => {
       '📅  Leave & Time Off',
       '🎁  Benefits',
       '📄  HR Document Requests',
+      'View My Payslip',
     ]);
   });
 

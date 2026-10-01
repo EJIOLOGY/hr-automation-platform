@@ -5,6 +5,7 @@ export const MENU_IDS = {
   BENEFITS: 'benefits_menu',
   VERIFICATION: 'verification_menu',
   DOCUMENT_REQUEST: 'document_request_menu',
+  PAYSLIP: 'PAYSLIP',
 } as const;
 
 export const MENU_SELECTION_IDS = {
@@ -12,6 +13,7 @@ export const MENU_SELECTION_IDS = {
   LEAVE_BALANCE: 'leave_balance',
   BENEFITS: 'benefits',
   HR_DOCUMENT_REQUESTS: 'hr_document_requests',
+  VIEW_PAYSLIP: 'VIEW_PAYSLIP',
   TALK_TO_HR: 'talk_to_hr',
 
   LEAVE_POLICY: 'leave_policy',
@@ -44,6 +46,7 @@ export type MenuAction =
   | 'open_benefits'
   | 'open_hr_document_requests'
   | 'open_document_request'
+  | 'open_payslip'
   | 'talk_to_hr'
   | 'show_leave_policy'
   | 'show_working_hours_attendance'
@@ -114,6 +117,11 @@ export const MENU_CONFIG: readonly MenuDefinition[] = [
         id: MENU_SELECTION_IDS.HR_DOCUMENT_REQUESTS,
         label: 'HR Document Requests',
         action: 'open_hr_document_requests',
+      },
+      {
+        id: MENU_SELECTION_IDS.VIEW_PAYSLIP,
+        label: 'View My Payslip',
+        action: 'open_payslip',
       },
     ],
   },

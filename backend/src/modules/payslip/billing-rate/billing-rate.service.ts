@@ -1,8 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { BillingRateUploadStatus } from '../../../generated/prisma/enums';
+import { Prisma } from '../../../generated/prisma/client';
 import { parseBillingRateWorkbook } from './billing-rate.parser';
 import { BillingRateValidator } from './billing-rate.validator';
 
@@ -27,14 +32,18 @@ export class BillingRateService {
     actor: BillingRateImportActor,
   ) {
     const [company, period] = await Promise.all([
-      this.prisma.accountingCompany.findUnique({ where: { id: accountingCompanyId } }),
+      this.prisma.accountingCompany.findUnique({
+        where: { id: accountingCompanyId },
+      }),
       this.prisma.payrollPeriod.findUnique({ where: { id: payrollPeriodId } }),
     ]);
 
     if (!company) throw new NotFoundException('Accounting company not found.');
     if (!period) throw new NotFoundException('Payroll period not found.');
     if (period.accountingCompanyId !== accountingCompanyId) {
-      throw new ConflictException('Payroll period does not belong to the selected accounting company.');
+      throw new ConflictException(
+        'Payroll period does not belong to the selected accounting company.',
+      );
     }
 
     const sourceFileHash = createHash('sha256').update(buffer).digest('hex');
@@ -52,7 +61,10 @@ export class BillingRateService {
     const parsed = parseBillingRateWorkbook(buffer);
     this.validator.validate(parsed);
     const summary = this.validator.summarize(parsed.rows);
-    const status = summary.invalidRows > 0 ? BillingRateUploadStatus.REJECTED : BillingRateUploadStatus.VALIDATED;
+    const status =
+      summary.invalidRows > 0
+        ? BillingRateUploadStatus.REJECTED
+        : BillingRateUploadStatus.VALIDATED;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const latest = await tx.billingRateUpload.findFirst({
@@ -60,7 +72,18 @@ export class BillingRateService {
         orderBy: { version: 'desc' },
         select: { version: true },
       });
+
       const version = (latest?.version ?? 0) + 1;
+
+      if (parsed.inputMetadata?.month || parsed.inputMetadata?.year) {
+        await tx.payrollPeriod.update({
+          where: { id: payrollPeriodId },
+          data: {
+            month: parsed.inputMetadata.month ?? undefined,
+            year: parsed.inputMetadata.year ?? undefined,
+          },
+        });
+      }
 
       const upload = await tx.billingRateUpload.create({
         data: {
@@ -78,9 +101,15 @@ export class BillingRateService {
             create: parsed.rows.map((row) => ({
               rowNumber: row.rowNumber,
               staffId: row.staffId || `INVALID_ROW_${row.rowNumber}`,
-              rawData: row.rawData,
-              normalizedData: row.normalizedData,
-              validationErrors: row.validationErrors.length > 0 ? row.validationErrors : undefined,
+              rawData: row.rawData as Prisma.InputJsonValue,
+              normalizedData: {
+                ...row.normalizedData,
+                _cellCoordinates: row.cellCoordinates,
+              },
+              validationErrors:
+                row.validationErrors.length > 0
+                  ? (row.validationErrors as unknown as Prisma.InputJsonValue)
+                  : undefined,
             })),
           },
         },
