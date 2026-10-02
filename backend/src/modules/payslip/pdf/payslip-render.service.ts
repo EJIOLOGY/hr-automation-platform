@@ -1,13 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import type { PayslipHtmlData } from './payslip.template';
-import { PayslipLineKind } from '../../../generated/prisma/client';
+import { PayslipLineKind, PayslipStatus } from '../../../generated/prisma/client';
 
 @Injectable()
 export class PayslipRenderService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPayslipData(payslipId: string): Promise<PayslipHtmlData> {
+  async getPayslipData(payslipId: string, preview = false): Promise<PayslipHtmlData> {
     const payslip = await this.prisma.payslip.findUnique({
       where: { id: payslipId },
       include: {
@@ -29,6 +29,9 @@ export class PayslipRenderService {
 
     if (!payslip) {
       throw new NotFoundException(`Payslip with ID ${payslipId} not found`);
+    }
+    if (!preview && payslip.status !== PayslipStatus.APPROVED) {
+      throw new ConflictException('Final employee payslips can only be generated after approval.');
     }
 
     return this.mapToHtmlData(payslip);

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, Res, UseGuards, NotImplementedException } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Post, Param, Body, Query, Res, UseGuards, NotImplementedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -9,6 +9,7 @@ import { HrOfficerRole } from '../../../generated/prisma/client';
 import { PdfService } from './pdf.service';
 import { PayslipRenderService } from './payslip-render.service';
 import { PayslipApprovalService } from '../approval/payslip-approval.service';
+import { PayslipAuthorizationService } from '../payslip-authorization.service';
 
 @Controller('payslip')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,13 +19,16 @@ export class PayslipPdfController {
     private readonly pdfService: PdfService,
     private readonly renderService: PayslipRenderService,
     private readonly approvalService: PayslipApprovalService,
+    private readonly authorization: PayslipAuthorizationService,
   ) {}
 
   @Get(':payslipId/pdf')
   async getPayslipPdf(
     @Param('payslipId') payslipId: string,
+    @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ) {
+    await this.authorization.assertPayslip(payslipId, user);
     const data = await this.renderService.getPayslipData(payslipId);
     const pdfBuffer = await this.pdfService.generatePayslipPdf(data);
     
@@ -34,6 +38,23 @@ export class PayslipPdfController {
       'Content-Length': pdfBuffer.length,
     });
     
+    res.end(pdfBuffer);
+  }
+
+  @Get(':payslipId/pdf-preview')
+  async getPayslipPreview(
+    @Param('payslipId') payslipId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res() res: Response,
+  ) {
+    await this.authorization.assertPayslip(payslipId, user);
+    const data = await this.renderService.getPayslipData(payslipId, true);
+    const pdfBuffer = await this.pdfService.generatePayslipPdf(data);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="preview-${data.staffId}-${data.month}-${data.year}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+    });
     res.end(pdfBuffer);
   }
 
@@ -47,6 +68,7 @@ export class PayslipPdfController {
     @Param('batchId') batchId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.authorization.assertBatch(batchId, user);
     return this.approvalService.approveBatch(batchId, {
       actorType: 'HrOfficer',
       actorHrOfficerId: user.id,
@@ -59,6 +81,7 @@ export class PayslipPdfController {
     @Body('reason') reason: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.authorization.assertBatch(batchId, user);
     return this.approvalService.rejectBatch(batchId, reason, {
       actorType: 'HrOfficer',
       actorHrOfficerId: user.id,
@@ -69,7 +92,12 @@ export class PayslipPdfController {
   async listBatches(
     @Query('companyId') companyId: string,
     @Query('periodId') periodId?: string,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
+    if (!periodId && user?.role !== HrOfficerRole.ADMIN) {
+      throw new ForbiddenException('HR officers must request batches for a claimed payroll period.');
+    }
+    if (periodId) await this.authorization.assertCompanyPeriod(companyId, periodId, user!);
     return this.approvalService.listBatches(companyId, periodId);
   }
 }

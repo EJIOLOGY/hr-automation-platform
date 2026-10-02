@@ -24,8 +24,15 @@ export class PayslipApprovalService {
       throw new NotFoundException(`Batch ${batchId} not found`);
     }
 
-    if (batch.status !== PayslipBatchStatus.CALCULATED) {
-      throw new ConflictException(`Batch is not in CALCULATED state (current: ${batch.status})`);
+    if (batch.status !== PayslipBatchStatus.CALCULATED && batch.status !== PayslipBatchStatus.IN_REVIEW) {
+      throw new ConflictException(`Batch is not approvable (current: ${batch.status})`);
+    }
+
+    const ineligible = await this.prisma.payslip.count({
+      where: { payslipBatchId: batchId, status: { not: PayslipStatus.IN_REVIEW } },
+    });
+    if (ineligible > 0) {
+      throw new ConflictException('Every payslip must be explicitly IN_REVIEW before batch approval.');
     }
 
     const now = new Date();
@@ -69,17 +76,14 @@ export class PayslipApprovalService {
       throw new NotFoundException(`Batch ${batchId} not found`);
     }
 
-    if (batch.status !== PayslipBatchStatus.CALCULATED) {
-      throw new ConflictException(`Batch is not in CALCULATED state (current: ${batch.status})`);
+    if (batch.status !== PayslipBatchStatus.CALCULATED && batch.status !== PayslipBatchStatus.IN_REVIEW) {
+      throw new ConflictException(`Batch is not rejectable (current: ${batch.status})`);
     }
 
-    await this.prisma.payslipBatch.update({
-      where: { id: batchId },
-      data: {
-        status: PayslipBatchStatus.DRAFT,
-        approvedAt: null,
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.payslipBatch.update({ where: { id: batchId }, data: { status: PayslipBatchStatus.REJECTED, approvedAt: null } }),
+      this.prisma.payslip.updateMany({ where: { payslipBatchId: batchId, status: { not: PayslipStatus.APPROVED } }, data: { status: PayslipStatus.REJECTED } }),
+    ]);
 
     await this.audit.log({
       actorType: actor.actorType,

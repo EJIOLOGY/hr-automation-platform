@@ -12,6 +12,8 @@ import { ReviewWorkbookController } from './review/review-workbook.controller';
 import { ReviewWorkbookService } from './review/review-workbook.service';
 import { PayslipDashboardController } from './dashboard/payslip-dashboard.controller';
 import { PayslipDashboardService } from './dashboard/payslip-dashboard.service';
+import { PayslipAuthorizationService } from './payslip-authorization.service';
+import { PayslipClaimController } from './payslip-claim.controller';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -19,14 +21,14 @@ import { PayslipDashboardService } from './dashboard/payslip-dashboard.service';
     PayslipCalculationController, 
     PayslipPdfController, 
     ReviewWorkbookController, 
-    PayslipDashboardController
+    PayslipDashboardController, PayslipClaimController
   ],
   providers: [
     PayslipCalculationService, 
     PayslipApprovalService, 
     PayslipRenderService, 
     ReviewWorkbookService, 
-    PayslipDashboardService
+    PayslipDashboardService, PayslipAuthorizationService
   ],
   exports: [
     PayslipCalculationService, 

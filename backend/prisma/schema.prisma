@@ -134,6 +134,7 @@ model HrOfficer {
   billingRateUploads    BillingRateUpload[] @relation("BillingRateUploads")
   payslipBatchesCreated PayslipBatch[] @relation("PayslipBatchesCreated")
   approvedPayslipBatches PayslipBatch[] @relation("PayslipBatchesApproved")
+  payslipWorkloadClaims PayslipWorkloadClaim[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -302,6 +303,7 @@ model AccountingCompany {
   payrollPeriods     PayrollPeriod[]
   billingRateUploads BillingRateUpload[]
   payslipBatches     PayslipBatch[]
+  payslipWorkloadClaims PayslipWorkloadClaim[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -323,6 +325,7 @@ model PayrollPeriod {
 
   billingRateUploads BillingRateUpload[]
   payslipBatches     PayslipBatch[]
+  payslipWorkloadClaims PayslipWorkloadClaim[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -331,6 +334,24 @@ model PayrollPeriod {
   @@index([accountingCompanyId])
   @@index([status])
   @@index([startDate, endDate])
+}
+
+// Dynamic authorization: officers claim a company-period workload; administrators remain global.
+model PayslipWorkloadClaim {
+  id String @id @default(uuid())
+  accountingCompanyId String
+  accountingCompany AccountingCompany @relation(fields: [accountingCompanyId], references: [id], onDelete: Cascade)
+  payrollPeriodId String
+  payrollPeriod PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  claimedById String?
+  claimedBy HrOfficer? @relation(fields: [claimedById], references: [id], onDelete: SetNull)
+  claimedAt DateTime?
+  releasedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountingCompanyId, payrollPeriodId])
+  @@index([claimedById])
 }
 
 model BillingRateUpload {
@@ -444,6 +465,10 @@ model Payslip {
 
   lines PayslipLine[]
 
+  supersedesPayslipId String?
+  supersedesPayslip   Payslip?  @relation("PayslipVersions", fields: [supersedesPayslipId], references: [id], onDelete: Restrict)
+  replacementPayslips Payslip[] @relation("PayslipVersions")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -453,6 +478,7 @@ model Payslip {
   @@index([billingRateRowId])
   @@index([status])
   @@index([createdAt])
+  @@index([supersedesPayslipId])
 }
 
 model AllowanceDefinition {

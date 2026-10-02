@@ -13,18 +13,20 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { PayslipCalculationService } from './payslip-calculation.service';
+import { PayslipAuthorizationService } from '../payslip-authorization.service';
 
 @Controller('payslip')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(HrOfficerRole.ADMIN, HrOfficerRole.OFFICER)
 export class PayslipCalculationController {
-  constructor(private readonly calculationService: PayslipCalculationService) {}
+  constructor(private readonly calculationService: PayslipCalculationService, private readonly authorization: PayslipAuthorizationService) {}
 
   @Post('calculate/:uploadId')
   async calculateBatch(
     @Param('uploadId', new ParseUUIDPipe()) uploadId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.authorization.assertUpload(uploadId, user);
     return this.calculationService.calculateUpload(uploadId, {
       actorType: 'HR_OFFICER',
       actorHrOfficerId: user.id,
@@ -34,7 +36,9 @@ export class PayslipCalculationController {
   @Get('batches/:batchId')
   async getBatchSummary(
     @Param('batchId', new ParseUUIDPipe()) batchId: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.authorization.assertBatch(batchId, user);
     return this.calculationService.getBatchSummary(batchId);
   }
 }

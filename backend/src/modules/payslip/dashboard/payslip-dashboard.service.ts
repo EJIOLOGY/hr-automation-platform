@@ -1,11 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import {
   calculatePayslip,
   type AllowanceMetadata,
 } from '../calculation/calculation-engine';
-import { PayslipStatus, Prisma } from '../../../generated/prisma/client';
+import { HrOfficerRole, PayslipStatus, Prisma } from '../../../generated/prisma/client';
 import type { CalculationInputs } from '../calculation/calculation.types';
 import { CorrectPayslipDto } from './correct-payslip.dto';
 
@@ -24,7 +24,9 @@ export class PayslipDashboardService {
     private readonly audit: AuditService,
   ) {}
 
-  async getPeriodRollup(payrollPeriodId?: string): Promise<PeriodRollup[]> {
+  async getPeriodRollup(payrollPeriodId?: string, actor?: { id: string; role: string }): Promise<PeriodRollup[]> {
+    const claims = actor?.role === HrOfficerRole.ADMIN ? [] : await this.prisma.payslipWorkloadClaim.findMany({ where: { claimedById: actor?.id }, select: { accountingCompanyId: true, payrollPeriodId: true } });
+    const allowed = new Set(claims.map((claim) => `${claim.accountingCompanyId}:${claim.payrollPeriodId}`));
     const periods = await this.prisma.payrollPeriod.findMany({
       where: payrollPeriodId ? { id: payrollPeriodId } : undefined,
       include: {
@@ -49,6 +51,7 @@ export class PayslipDashboardService {
       }
 
       for (const batch of latestBatches.values()) {
+        if (actor?.role !== HrOfficerRole.ADMIN && !allowed.has(`${batch.accountingCompanyId}:${batch.payrollPeriodId}`)) continue;
         const compId = batch.accountingCompanyId;
         const compName = batch.accountingCompany.name;
         
@@ -125,7 +128,7 @@ export class PayslipDashboardService {
   ) {
     const payslip = await this.prisma.payslip.findUnique({
       where: { id: payslipId },
-      include: { lines: true },
+      include: { lines: true, payslipBatch: { include: { payslips: { include: { lines: true } } } } },
     });
 
     if (!payslip) throw new NotFoundException('Payslip not found');
@@ -152,6 +155,50 @@ export class PayslipDashboardService {
 
     const result = calculatePayslip(newInputs, allowanceMeta);
     const { lines, ...outputs } = result;
+
+    if (payslip.status === PayslipStatus.APPROVED) {
+      const correction = await this.prisma.$transaction(async (tx) => {
+        const latest = await tx.payslipBatch.findFirst({
+          where: { accountingCompanyId: payslip.payslipBatch.accountingCompanyId, payrollPeriodId: payslip.payslipBatch.payrollPeriodId },
+          orderBy: { version: 'desc' }, select: { version: true },
+        });
+        const batch = await tx.payslipBatch.create({ data: {
+          accountingCompanyId: payslip.payslipBatch.accountingCompanyId,
+          payrollPeriodId: payslip.payslipBatch.payrollPeriodId,
+          billingRateUploadId: payslip.payslipBatch.billingRateUploadId,
+          version: (latest?.version ?? 0) + 1,
+          status: 'IN_REVIEW', createdById: actor.actorHrOfficerId, calculatedAt: new Date(),
+        } });
+        let replacementId = '';
+        for (const original of payslip.payslipBatch.payslips) {
+          const isCorrected = original.id === payslip.id;
+          const created = await tx.payslip.create({ data: {
+            payslipBatchId: batch.id, billingRateRowId: original.billingRateRowId,
+            employeeId: original.employeeId, staffId: original.staffId,
+            status: PayslipStatus.IN_REVIEW, supersedesPayslipId: original.id,
+            calculationInputs: (isCorrected ? newInputs : original.calculationInputs) as Prisma.InputJsonValue,
+            calculationOutputs: (isCorrected ? outputs : original.calculationOutputs) as Prisma.InputJsonValue,
+            reviewData: { correctionOf: original.id, correctedBy: actor.actorHrOfficerId } as Prisma.InputJsonValue,
+          } });
+          const sourceLines = isCorrected ? lines : original.lines;
+          for (const line of sourceLines) await tx.payslipLine.create({ data: {
+            payslipId: created.id, name: line.name, kind: line.kind, amount: new Prisma.Decimal(line.amount),
+            taxClass: line.taxClass, sortOrder: line.sortOrder, sourceCell: line.sourceCell,
+            allowanceDefinitionId: isCorrected ? null : (line as typeof original.lines[number]).allowanceDefinitionId,
+          } });
+          if (isCorrected) replacementId = created.id;
+        }
+        return { batchId: batch.id, payslipId: replacementId };
+      });
+      await this.audit.log({ actorType: actor.actorType, actorHrOfficerId: actor.actorHrOfficerId,
+        action: 'PAYSLIP_CORRECTION_VERSION_CREATED', entityType: 'PAYSLIP', entityId: payslipId,
+        metadata: { replacementPayslipId: correction.payslipId, replacementBatchId: correction.batchId, overrides }, });
+      return correction;
+    }
+
+    if (payslip.status === PayslipStatus.REJECTED) {
+      throw new ConflictException('Rejected payslips must be recalculated from a reviewed workbook.');
+    }
 
     const updatedPayslip = await this.prisma.$transaction(async (tx) => {
       await tx.payslipLine.deleteMany({ where: { payslipId } });

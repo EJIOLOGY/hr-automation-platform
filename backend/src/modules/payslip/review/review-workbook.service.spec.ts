@@ -4,6 +4,7 @@ import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotFoundException } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
+import { PayslipDashboardService } from '../dashboard/payslip-dashboard.service';
 
 describe('ReviewWorkbookService', () => {
   let service: ReviewWorkbookService;
@@ -19,6 +20,7 @@ describe('ReviewWorkbookService', () => {
           useValue: {
             payslipBatch: {
               findUnique: jest.fn(),
+              update: jest.fn(),
             },
             reviewWorkbook: {
               create: jest.fn(),
@@ -28,7 +30,10 @@ describe('ReviewWorkbookService', () => {
             $transaction: jest.fn((cb) => cb(prisma)),
             payslip: {
               updateMany: jest.fn(),
+              findUnique: jest.fn(),
+              update: jest.fn(),
             },
+            payslipLine: { deleteMany: jest.fn(), create: jest.fn() },
           },
         },
         {
@@ -37,6 +42,7 @@ describe('ReviewWorkbookService', () => {
             log: jest.fn(),
           },
         },
+        { provide: PayslipDashboardService, useValue: { correctSinglePayslip: jest.fn() } },
       ],
     }).compile();
 
@@ -72,11 +78,14 @@ describe('ReviewWorkbookService', () => {
   describe('importReviewWorkbook', () => {
     it('should import a workbook and return correct counts', async () => {
       prisma.reviewWorkbook.findFirst.mockResolvedValue({ id: 'rw-1' } as any);
+      prisma.payslip.findUnique.mockResolvedValue({
+        id: 'p1', status: 'CALCULATED', calculationInputs: { daysWorked: 20, totalDays: 20, baseFee: 1000, otherDeduction: 0 },
+      } as any);
 
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Payslips');
-      ws.addRow(['StaffID', '...', '...', '...', '...', '...', '...', '...', '...', '...', 'ReviewNotes', 'HRDecision']);
-      ws.addRow(['EMP001', '', '', '', '', '', '', '', '', '', 'ok', 'APPROVE']);
+      ws.addRow(['StaffID', '...', '...', '...', 'DaysWorked', 'TotalDays', 'DaysAbsent', 'BaseFee', 'OtherDeduction', '...', '...', '...', '...', 'ReviewNotes', 'HRDecision']);
+      ws.addRow(['EMP001', '', '', '', 20, 20, 0, 1000, 25, '', '', '', '', 'ok', 'APPROVE']);
 
       const buffer = Buffer.from(await wb.xlsx.writeBuffer());
 

@@ -9,6 +9,7 @@ import {
   PayslipBatchStatus,
   PayslipStatus,
   Prisma,
+  BillingRateUploadStatus,
 } from '../../../generated/prisma/client';
 import {
   AllowanceMetadata,
@@ -41,6 +42,12 @@ export class PayslipCalculationService {
 
     if (!upload) {
       throw new NotFoundException('Billing Rate upload not found.');
+    }
+
+    if (upload.status !== BillingRateUploadStatus.VALIDATED) {
+      throw new BadRequestException(
+        `Only VALIDATED Billing Rate uploads can be calculated (current: ${upload.status}).`,
+      );
     }
 
     if (upload.rows.length === 0) {
@@ -104,6 +111,18 @@ export class PayslipCalculationService {
         employees.map((e) => [e.employeeNumber, e.id]),
       );
 
+      const unresolvedStaffIds = upload.rows
+        .filter((row) => {
+          const errors = (row.validationErrors as unknown[]) ?? [];
+          return errors.length === 0 && row.staffId && !employeeMap.has(row.staffId);
+        })
+        .map((row) => row.staffId);
+      if (unresolvedStaffIds.length > 0) {
+        throw new BadRequestException(
+          `Billing Rate upload contains unknown Staff ID(s): ${unresolvedStaffIds.join(', ')}.`,
+        );
+      }
+
       let calculatedCount = 0;
       let skippedCount = 0;
 
@@ -123,7 +142,9 @@ export class PayslipCalculationService {
         const totalDays = Number(rawNormalized['totalDays'] ?? 0);
         const daysWorked = Number(rawNormalized['daysWorked'] ?? 0);
         const daysAbsent = Number(rawNormalized['daysAbsent'] ?? 0);
-        const otherDeduction = Number(rawNormalized['otherDeduction'] ?? 0);
+        // Other deduction is deliberately an HR review input, never inferred
+        // from an uploaded Billing Rate column such as Loan/Advance.
+        const otherDeduction = 0;
 
         // Separate base allowances and arrears
         const allowances: Record<string, number> = {};

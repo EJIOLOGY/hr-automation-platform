@@ -18,6 +18,7 @@ describe('PayslipApprovalService', () => {
       },
       payslip: {
         updateMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
       },
       $transaction: jest.fn(),
     };
@@ -62,15 +63,16 @@ describe('PayslipApprovalService', () => {
       .rejects.toThrow(ConflictException);
   });
 
-  it('rejectBatch — transitions to DRAFT, logs audit', async () => {
+  it('rejectBatch — transitions to REJECTED, logs audit', async () => {
     const batchId = 'batch-3';
     prisma.payslipBatch.findUnique.mockResolvedValue({ id: batchId, status: PayslipBatchStatus.CALCULATED });
-    prisma.payslipBatch.update.mockResolvedValue({ id: batchId, status: PayslipBatchStatus.DRAFT });
+    prisma.payslipBatch.update.mockResolvedValue({ id: batchId, status: PayslipBatchStatus.REJECTED });
+    prisma.$transaction.mockResolvedValue([]);
 
     await service.rejectBatch(batchId, 'Data error', { actorType: 'HrOfficer', actorHrOfficerId: 'u1' });
 
     expect(prisma.payslipBatch.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { status: PayslipBatchStatus.DRAFT, approvedAt: null }
+      data: { status: PayslipBatchStatus.REJECTED, approvedAt: null }
     }));
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
       action: 'PAYSLIP_BATCH_REJECTED',

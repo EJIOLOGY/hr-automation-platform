@@ -16,12 +16,13 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { BillingRateService } from './billing-rate.service';
+import { PayslipAuthorizationService } from '../payslip-authorization.service';
 
 @Controller('payslip/billing-rate')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(HrOfficerRole.ADMIN, HrOfficerRole.OFFICER)
 export class BillingRateController {
-  constructor(private readonly billingRateService: BillingRateService) {}
+  constructor(private readonly billingRateService: BillingRateService, private readonly authorization: PayslipAuthorizationService) {}
 
   @Post('import')
   @UseInterceptors(
@@ -52,6 +53,7 @@ export class BillingRateController {
   ) {
     if (!file)
       throw new BadRequestException('Billing Rate .xlsx file is required.');
+    await this.authorization.assertCompanyPeriod(accountingCompanyId, payrollPeriodId, user);
 
     return this.billingRateService.importWorkbook(
       file.buffer,

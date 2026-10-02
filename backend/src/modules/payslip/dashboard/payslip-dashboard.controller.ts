@@ -17,16 +17,17 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { HrOfficerRole, PayslipStatus } from '../../../generated/prisma/enums';
 import { CorrectPayslipDto } from './correct-payslip.dto';
+import { PayslipAuthorizationService } from '../payslip-authorization.service';
 
 @Controller('payslip')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(HrOfficerRole.ADMIN, HrOfficerRole.OFFICER)
 export class PayslipDashboardController {
-  constructor(private readonly dashboardService: PayslipDashboardService) {}
+  constructor(private readonly dashboardService: PayslipDashboardService, private readonly authorization: PayslipAuthorizationService) {}
 
   @Get('dashboard')
-  async getDashboard(@Query('periodId') periodId?: string) {
-    return this.dashboardService.getPeriodRollup(periodId);
+  async getDashboard(@Query('periodId') periodId: string | undefined, @CurrentUser() user: AuthenticatedUser) {
+    return this.dashboardService.getPeriodRollup(periodId, user);
   }
 
   @Get('batches/:batchId/payslips')
@@ -35,7 +36,9 @@ export class PayslipDashboardController {
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('cursor') cursor?: string,
     @Query('status') status?: PayslipStatus,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
+    await this.authorization.assertBatch(batchId, user!);
     return this.dashboardService.getPayslipsForBatch(batchId, { limit, cursor, status });
   }
 
@@ -45,6 +48,7 @@ export class PayslipDashboardController {
     @Body() dto: CorrectPayslipDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.authorization.assertPayslip(payslipId, user);
     return this.dashboardService.correctSinglePayslip(payslipId, dto, {
       actorType: 'HR_OFFICER',
       actorHrOfficerId: user.id,

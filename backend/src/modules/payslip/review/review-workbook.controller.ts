@@ -17,12 +17,13 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { ReviewWorkbookService } from './review-workbook.service';
+import { PayslipAuthorizationService } from '../payslip-authorization.service';
 
 @Controller('payslip')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(HrOfficerRole.ADMIN, HrOfficerRole.OFFICER)
 export class ReviewWorkbookController {
-  constructor(private readonly reviewService: ReviewWorkbookService) {}
+  constructor(private readonly reviewService: ReviewWorkbookService, private readonly authorization: PayslipAuthorizationService) {}
 
   @Get('batches/:batchId/review-workbook')
   async exportWorkbook(
@@ -30,6 +31,7 @@ export class ReviewWorkbookController {
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ): Promise<void> {
+    await this.authorization.assertBatch(batchId, user);
     const buf = await this.reviewService.exportReviewWorkbook(batchId, {
       actorType: 'HR_OFFICER',
       actorHrOfficerId: user.id,
@@ -49,6 +51,7 @@ export class ReviewWorkbookController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.authorization.assertBatch(batchId, user);
     return this.reviewService.importReviewWorkbook(batchId, file.buffer, {
       actorType: 'HR_OFFICER',
       actorHrOfficerId: user.id,
