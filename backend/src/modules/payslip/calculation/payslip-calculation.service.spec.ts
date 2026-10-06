@@ -3,6 +3,7 @@ import { PayslipCalculationService } from './payslip-calculation.service';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import {
+  BillingRateUploadStatus,
   PayslipBatchStatus,
   PayslipStatus,
 } from '../../../generated/prisma/client';
@@ -71,6 +72,7 @@ describe('PayslipCalculationService', () => {
   it('calculates payslips and line items from a billing rate upload', () => {
     prisma.billingRateUpload.findUnique.mockResolvedValue({
       id: 'upload-1',
+      status: BillingRateUploadStatus.VALIDATED,
       accountingCompanyId: 'comp-1',
       payrollPeriodId: 'period-1',
       rows: [

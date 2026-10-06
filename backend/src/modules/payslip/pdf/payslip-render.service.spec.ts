@@ -30,6 +30,7 @@ describe('PayslipRenderService', () => {
   it('Builds correct PayslipHtmlData from mock DB payslip', async () => {
     const mockDbPayslip = {
       id: 'p1',
+      status: 'APPROVED',
       staffId: 'STAFF-1',
       employee: { fullName: 'John Doe', jobTitle: 'Developer', department: 'Engineering' },
       lines: [
@@ -69,6 +70,7 @@ describe('PayslipRenderService', () => {
   it('Handles missing employee gracefully (employee = null -> fullName = staffId)', async () => {
     const mockDbPayslip = {
       id: 'p2',
+      status: 'APPROVED',
       staffId: 'STAFF-99',
       employee: null,
       lines: [],

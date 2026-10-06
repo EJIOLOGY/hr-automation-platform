@@ -25,7 +25,9 @@ export class PayslipDashboardService {
   ) {}
 
   async getPeriodRollup(payrollPeriodId?: string, actor?: { id: string; role: string }): Promise<PeriodRollup[]> {
-    const claims = actor?.role === HrOfficerRole.ADMIN ? [] : await this.prisma.payslipWorkloadClaim.findMany({ where: { claimedById: actor?.id }, select: { accountingCompanyId: true, payrollPeriodId: true } });
+    const claims = actor && actor.role !== HrOfficerRole.ADMIN
+      ? await this.prisma.payslipWorkloadClaim.findMany({ where: { claimedById: actor.id }, select: { accountingCompanyId: true, payrollPeriodId: true } })
+      : [];
     const allowed = new Set(claims.map((claim) => `${claim.accountingCompanyId}:${claim.payrollPeriodId}`));
     const periods = await this.prisma.payrollPeriod.findMany({
       where: payrollPeriodId ? { id: payrollPeriodId } : undefined,
@@ -51,7 +53,7 @@ export class PayslipDashboardService {
       }
 
       for (const batch of latestBatches.values()) {
-        if (actor?.role !== HrOfficerRole.ADMIN && !allowed.has(`${batch.accountingCompanyId}:${batch.payrollPeriodId}`)) continue;
+        if (actor && actor.role !== HrOfficerRole.ADMIN && !allowed.has(`${batch.accountingCompanyId}:${batch.payrollPeriodId}`)) continue;
         const compId = batch.accountingCompanyId;
         const compName = batch.accountingCompany.name;
         
