@@ -11,6 +11,7 @@ import { ConversationProvider } from "./conversation-context";
 import { OperationalQueueProvider } from "./operational-queue-context";
 import { EscalationQueue } from "./escalations-workspace";
 import { HrRequestsQueue } from "./hr-requests-workspace";
+import { DashboardPlaceholder } from "./dashboard-placeholder";
 
 interface AppShellProps {
   children: ReactNode;
@@ -28,12 +29,16 @@ export function AppShell({ children }: AppShellProps) {
   const isHrRequests =
     pathname === "/dashboard/hr-requests" ||
     pathname.startsWith("/dashboard/hr-requests/");
-  const showAccountMenu = accountMenuPath === pathname && !isAnalytics;
+  const showAccountMenu = accountMenuPath === pathname;
+  // Opening the account menu always gives it the secondary section, even on
+  // pages (Analytics, Audit Logs) that normally have only two sections.
+  const showSecondary = !isFullWorkspace || showAccountMenu;
 
   const content = (
     <>
       <NavigationRail
         isAccountMenuOpen={showAccountMenu}
+        onNavigate={() => setAccountMenuPath(null)}
         onAccountMenuToggle={() =>
           setAccountMenuPath((current) =>
             current === pathname ? null : pathname,
@@ -41,8 +46,14 @@ export function AppShell({ children }: AppShellProps) {
         }
       />
 
-      {!isFullWorkspace && (
-        <aside className="min-h-0 overflow-hidden border border-dashed bg-card px-1.5 pr-0 max-[760px]:hidden">
+      {showSecondary && (
+        <aside
+          className={
+            showAccountMenu
+              ? "min-h-0 overflow-hidden border border-dashed bg-card px-1.5 pr-0"
+              : "min-h-0 overflow-hidden border border-dashed bg-card px-1.5 pr-0 max-[760px]:hidden"
+          }
+        >
           {showAccountMenu ? (
             <div id="account-menu" className="h-full">
               <AccountMenu onClose={() => setAccountMenuPath(null)} />
@@ -63,10 +74,16 @@ export function AppShell({ children }: AppShellProps) {
       )}
 
       <section
-        className="min-h-0 min-w-0 overflow-y-auto bg-card"
-        aria-label="Active workspace"
+        className="min-h-0 min-w-0 overflow-y-auto bg-card max-[760px]:data-[account=open]:hidden"
+        data-account={showAccountMenu ? "open" : "closed"}
+        aria-label={showAccountMenu ? "Account workspace" : "Active workspace"}
       >
-        {children}
+        {/* Account's own tertiary page: reserved, intentionally unused for now. */}
+        {showAccountMenu && <DashboardPlaceholder title="Account" />}
+        {/* Keep the page mounted (hidden) so its state survives opening Account. */}
+        <div className={showAccountMenu ? "hidden" : "contents"}>
+          {children}
+        </div>
       </section>
     </>
   );
@@ -74,7 +91,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <main
       className={
-        isFullWorkspace
+        !showSecondary
           ? "grid h-dvh grid-cols-[8.7rem_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
           : "grid h-dvh grid-cols-[8.7rem_minmax(17rem,22rem)_minmax(0,1fr)] overflow-hidden bg-background max-[760px]:grid-cols-[4.5rem_minmax(0,1fr)]"
       }

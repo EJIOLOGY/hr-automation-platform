@@ -14,6 +14,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/auth-provider";
+import { getRoleLabel } from "@/lib/role-label";
 
 interface NavigationItem {
   label: string;
@@ -35,6 +36,7 @@ const navigationItems: NavigationItem[] = [
 interface NavigationRailProps {
   isAccountMenuOpen: boolean;
   onAccountMenuToggle: () => void;
+  onNavigate: () => void;
 }
 
 function getInitials(name: string) {
@@ -52,6 +54,7 @@ function getInitials(name: string) {
 export function NavigationRail({
   isAccountMenuOpen,
   onAccountMenuToggle,
+  onNavigate,
 }: NavigationRailProps) {
   const pathname = usePathname();
   const { user } = useAuth();
@@ -81,6 +84,7 @@ export function NavigationRail({
               key={href}
               href={href}
               aria-current={isActive ? "page" : undefined}
+              onClick={onNavigate}
               className={cn(
                 "flex min-h-17 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[12px] font-semibold leading-3 text-white/80 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70",
                 isActive &&
@@ -98,7 +102,8 @@ export function NavigationRail({
           type="button"
           onClick={onAccountMenuToggle}
           aria-expanded={isAccountMenuOpen}
-          aria-controls="account-menu"
+          aria-haspopup="true"
+          aria-controls={isAccountMenuOpen ? "account-menu" : undefined}
           className="flex w-full items-center justify-center gap-1 rounded-xl py-2 text-white transition-colors hover:bg-white/10"
         >
           <div className="flex flex-col items-center">
@@ -108,7 +113,7 @@ export function NavigationRail({
 
             <span className="mt-2 text-center">
               <span className="block text-sm font-semibold leading-tight">
-                Administrator
+                {getRoleLabel(user?.role)}
               </span>
             </span>
           </div>

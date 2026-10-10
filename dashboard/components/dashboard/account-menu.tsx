@@ -3,6 +3,7 @@
 import React from "react";
 import { LogOut, UserRound, ChevronLeft, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { getRoleLabel } from "@/lib/role-label";
 
 interface AccountMenuProps {
   onClose: () => void;
@@ -25,12 +26,7 @@ export function AccountMenu({ onClose }: AccountMenuProps) {
   }
 
   const fullName = user?.fullName ?? "HR Officer";
-  const role =
-    user?.role === "ADMIN"
-      ? "Administrator"
-      : user?.role === "OFFICER"
-        ? "HR Officer"
-        : (user?.role ?? "HR Officer");
+  const role = getRoleLabel(user?.role);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
@@ -39,7 +35,7 @@ export function AccountMenu({ onClose }: AccountMenuProps) {
         <button
           type="button"
           onClick={onClose}
-          aria-label="Back to conversations"
+          aria-label="Close account menu"
           className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <ChevronLeft className="size-5" aria-hidden="true" />
