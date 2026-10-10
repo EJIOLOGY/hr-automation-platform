@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Post,
@@ -17,13 +18,29 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { ReviewWorkbookService } from './review-workbook.service';
+import { ReviewDecisionService } from './review-decision.service';
+import { ReviewDecisionsDto } from './dto/review-decision.dto';
 import { PayslipAuthorizationService } from '../payslip-authorization.service';
 
 @Controller('payslip')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(HrOfficerRole.ADMIN, HrOfficerRole.OFFICER)
 export class ReviewWorkbookController {
-  constructor(private readonly reviewService: ReviewWorkbookService, private readonly authorization: PayslipAuthorizationService) {}
+  constructor(
+    private readonly reviewService: ReviewWorkbookService,
+    private readonly reviewDecisionService: ReviewDecisionService,
+    private readonly authorization: PayslipAuthorizationService,
+  ) {}
+
+  @Post('batches/:batchId/review-decisions')
+  async recordReviewDecisions(
+    @Param('batchId', new ParseUUIDPipe()) batchId: string,
+    @Body() dto: ReviewDecisionsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.authorization.assertBatch(batchId, user);
+    return this.reviewDecisionService.recordReviewDecisions(batchId, dto, user);
+  }
 
   @Get('batches/:batchId/review-workbook')
   async exportWorkbook(

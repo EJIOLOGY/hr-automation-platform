@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, Post, Param, Body, Query, Res, UseGuards, NotImplementedException } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Post, Param, Body, Query, Res, UseGuards, NotImplementedException, ParseUUIDPipe } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -10,6 +10,9 @@ import { PdfService } from './pdf.service';
 import { PayslipRenderService } from './payslip-render.service';
 import { PayslipApprovalService } from '../approval/payslip-approval.service';
 import { PayslipAuthorizationService } from '../payslip-authorization.service';
+import { ApproveBatchDto } from '../approval/dto/approve-batch.dto';
+import { RejectBatchDto } from '../approval/dto/reject-batch.dto';
+import { PAYSLIP_AUDIT_ACTOR } from '../shared/payslip-audit';
 
 @Controller('payslip')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -65,25 +68,26 @@ export class PayslipPdfController {
 
   @Post('batches/:batchId/approve')
   async approveBatch(
-    @Param('batchId') batchId: string,
+    @Param('batchId', new ParseUUIDPipe()) batchId: string,
+    @Body() dto: ApproveBatchDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.authorization.assertBatch(batchId, user);
-    return this.approvalService.approveBatch(batchId, {
-      actorType: 'HrOfficer',
+    return this.approvalService.approveBatch(batchId, dto, {
+      actorType: PAYSLIP_AUDIT_ACTOR,
       actorHrOfficerId: user.id,
     });
   }
 
   @Post('batches/:batchId/reject')
   async rejectBatch(
-    @Param('batchId') batchId: string,
-    @Body('reason') reason: string,
+    @Param('batchId', new ParseUUIDPipe()) batchId: string,
+    @Body() dto: RejectBatchDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.authorization.assertBatch(batchId, user);
-    return this.approvalService.rejectBatch(batchId, reason, {
-      actorType: 'HrOfficer',
+    return this.approvalService.rejectBatch(batchId, dto, {
+      actorType: PAYSLIP_AUDIT_ACTOR,
       actorHrOfficerId: user.id,
     });
   }

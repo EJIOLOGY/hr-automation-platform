@@ -16,6 +16,8 @@ import { PayslipAuthorizationService } from './payslip-authorization.service';
 import { PayslipClaimController } from './payslip-claim.controller';
 import { PayslipCatalogController } from './catalog/payslip-catalog.controller';
 import { PayslipCatalogService } from './catalog/payslip-catalog.service';
+import { ReviewDecisionService } from './review/review-decision.service';
+import { PayslipCorrectionService } from './correction/payslip-correction.service';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -32,7 +34,9 @@ import { PayslipCatalogService } from './catalog/payslip-catalog.service';
     PayslipApprovalService, 
     PayslipRenderService, 
     ReviewWorkbookService, 
+    ReviewDecisionService,
     PayslipDashboardService, 
+    PayslipCorrectionService,
     PayslipAuthorizationService,
     PayslipCatalogService,
   ],
@@ -40,7 +44,9 @@ import { PayslipCatalogService } from './catalog/payslip-catalog.service';
     PayslipCalculationService, 
     PayslipApprovalService, 
     ReviewWorkbookService, 
+    ReviewDecisionService,
     PayslipDashboardService,
+    PayslipCorrectionService,
     PayslipAuthorizationService,
     PayslipCatalogService,
   ],

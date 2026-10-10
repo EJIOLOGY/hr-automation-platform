@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import {
@@ -8,6 +8,10 @@ import {
 import { HrOfficerRole, PayslipStatus, Prisma } from '../../../generated/prisma/client';
 import type { CalculationInputs } from '../calculation/calculation.types';
 import { CorrectPayslipDto } from './correct-payslip.dto';
+import { PayslipCorrectionService } from '../correction/payslip-correction.service';
+import { runPayslipTransaction } from '../shared/payslip-transaction';
+import { payslipError } from '../shared/payslip-error-codes';
+import { PAYSLIP_AUDIT_ACTOR, payslipAuditMetadata } from '../shared/payslip-audit';
 
 export interface PeriodRollup {
   accountingCompanyId: string;
@@ -22,6 +26,7 @@ export class PayslipDashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly correctionService: PayslipCorrectionService,
   ) {}
 
   async getPeriodRollup(payrollPeriodId?: string, actor?: { id: string; role: string }): Promise<PeriodRollup[]> {
@@ -135,6 +140,17 @@ export class PayslipDashboardService {
 
     if (!payslip) throw new NotFoundException('Payslip not found');
 
+    if (payslip.status === PayslipStatus.APPROVED) {
+      const correction = await this.correctionService.createCorrectionVersion(
+        [{ payslipId, overrides }],
+        actor,
+      );
+      return {
+        batchId: correction.batchId,
+        payslipId: correction.replacementPayslipIds[payslipId],
+      };
+    }
+
     const existingInputs = (payslip.calculationInputs as unknown as CalculationInputs) || {};
     const newInputs: CalculationInputs = {
       ...existingInputs,
@@ -158,51 +174,36 @@ export class PayslipDashboardService {
     const result = calculatePayslip(newInputs, allowanceMeta);
     const { lines, ...outputs } = result;
 
-    if (payslip.status === PayslipStatus.APPROVED) {
-      const correction = await this.prisma.$transaction(async (tx) => {
-        const latest = await tx.payslipBatch.findFirst({
-          where: { accountingCompanyId: payslip.payslipBatch.accountingCompanyId, payrollPeriodId: payslip.payslipBatch.payrollPeriodId },
-          orderBy: { version: 'desc' }, select: { version: true },
-        });
-        const batch = await tx.payslipBatch.create({ data: {
-          accountingCompanyId: payslip.payslipBatch.accountingCompanyId,
-          payrollPeriodId: payslip.payslipBatch.payrollPeriodId,
-          billingRateUploadId: payslip.payslipBatch.billingRateUploadId,
-          version: (latest?.version ?? 0) + 1,
-          status: 'IN_REVIEW', createdById: actor.actorHrOfficerId, calculatedAt: new Date(),
-        } });
-        let replacementId = '';
-        for (const original of payslip.payslipBatch.payslips) {
-          const isCorrected = original.id === payslip.id;
-          const created = await tx.payslip.create({ data: {
-            payslipBatchId: batch.id, billingRateRowId: original.billingRateRowId,
-            employeeId: original.employeeId, staffId: original.staffId,
-            status: PayslipStatus.IN_REVIEW, supersedesPayslipId: original.id,
-            calculationInputs: (isCorrected ? newInputs : original.calculationInputs) as Prisma.InputJsonValue,
-            calculationOutputs: (isCorrected ? outputs : original.calculationOutputs) as Prisma.InputJsonValue,
-            reviewData: { correctionOf: original.id, correctedBy: actor.actorHrOfficerId } as Prisma.InputJsonValue,
-          } });
-          const sourceLines = isCorrected ? lines : original.lines;
-          for (const line of sourceLines) await tx.payslipLine.create({ data: {
-            payslipId: created.id, name: line.name, kind: line.kind, amount: new Prisma.Decimal(line.amount),
-            taxClass: line.taxClass, sortOrder: line.sortOrder, sourceCell: line.sourceCell,
-            allowanceDefinitionId: isCorrected ? null : (line as typeof original.lines[number]).allowanceDefinitionId,
-          } });
-          if (isCorrected) replacementId = created.id;
-        }
-        return { batchId: batch.id, payslipId: replacementId };
-      });
-      await this.audit.log({ actorType: actor.actorType, actorHrOfficerId: actor.actorHrOfficerId,
-        action: 'PAYSLIP_CORRECTION_VERSION_CREATED', entityType: 'PAYSLIP', entityId: payslipId,
-        metadata: { replacementPayslipId: correction.payslipId, replacementBatchId: correction.batchId, overrides }, });
-      return correction;
-    }
-
     if (payslip.status === PayslipStatus.REJECTED) {
-      throw new ConflictException('Rejected payslips must be recalculated from a reviewed workbook.');
+      throw new ConflictException('Rejected payslips must be reset to CALCULATED before editing.');
     }
 
-    const updatedPayslip = await this.prisma.$transaction(async (tx) => {
+    // D-LATEST check for non-approved payslip
+    const latestBatch = await this.prisma.payslipBatch.findFirst({
+      where: {
+        accountingCompanyId: payslip.payslipBatch.accountingCompanyId,
+        payrollPeriodId: payslip.payslipBatch.payrollPeriodId,
+      },
+      orderBy: { version: 'desc' },
+      select: { id: true, version: true },
+    });
+
+    if (latestBatch && latestBatch.id !== payslip.payslipBatchId) {
+      throw payslipError(
+        HttpStatus.CONFLICT,
+        'NEWER_VERSION_EXISTS',
+        'A newer version of this payroll exists. Edits must target the latest version.',
+        { latestVersion: latestBatch.version },
+      );
+    }
+
+    const wasReviewed = Boolean(
+      payslip.status === PayslipStatus.IN_REVIEW ||
+        payslip.status === PayslipStatus.HELD ||
+        payslip.reviewedAt !== null,
+    );
+
+    const updatedPayslip = await runPayslipTransaction(this.prisma, 'ROW', async (tx) => {
       await tx.payslipLine.deleteMany({ where: { payslipId } });
 
       const updated = await tx.payslip.update({
@@ -211,21 +212,25 @@ export class PayslipDashboardService {
           calculationInputs: newInputs as unknown as Prisma.InputJsonValue,
           calculationOutputs: outputs as unknown as Prisma.InputJsonValue,
           status: PayslipStatus.CALCULATED,
+          changedSinceReview: wasReviewed,
           approvedAt: null,
           reviewedAt: null,
+          reviewedById: null,
         },
       });
 
       for (const line of lines) {
-        const def = allowanceDefs.find(d => d.canonicalName === line.canonicalName);
+        const def = allowanceDefs.find((d) => d.canonicalName === line.canonicalName);
         await tx.payslipLine.create({
           data: {
             payslipId: updated.id,
-            allowanceDefinitionId: def?.id ?? '',
+            allowanceDefinitionId: def?.id ?? null,
             name: line.name,
             kind: line.kind,
             amount: new Prisma.Decimal(line.amount),
             taxClass: line.taxClass,
+            sortOrder: line.sortOrder,
+            sourceCell: line.sourceCell ?? null,
           },
         });
       }
@@ -234,12 +239,17 @@ export class PayslipDashboardService {
     });
 
     await this.audit.log({
-      actorType: actor.actorType,
+      actorType: PAYSLIP_AUDIT_ACTOR,
       actorHrOfficerId: actor.actorHrOfficerId,
       action: 'PAYSLIP_CORRECTED',
       entityType: 'PAYSLIP',
       entityId: payslipId,
-      metadata: { overrides },
+      metadata: payslipAuditMetadata({
+        companyId: payslip.payslipBatch.accountingCompanyId,
+        periodId: payslip.payslipBatch.payrollPeriodId,
+        batchId: payslip.payslipBatchId,
+        payslipId,
+      }),
     });
 
     return updatedPayslip;
