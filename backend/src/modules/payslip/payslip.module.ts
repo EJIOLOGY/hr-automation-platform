@@ -14,6 +14,8 @@ import { PayslipDashboardController } from './dashboard/payslip-dashboard.contro
 import { PayslipDashboardService } from './dashboard/payslip-dashboard.service';
 import { PayslipAuthorizationService } from './payslip-authorization.service';
 import { PayslipClaimController } from './payslip-claim.controller';
+import { PayslipCatalogController } from './catalog/payslip-catalog.controller';
+import { PayslipCatalogService } from './catalog/payslip-catalog.service';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -21,20 +23,26 @@ import { PayslipClaimController } from './payslip-claim.controller';
     PayslipCalculationController, 
     PayslipPdfController, 
     ReviewWorkbookController, 
-    PayslipDashboardController, PayslipClaimController
+    PayslipDashboardController, 
+    PayslipClaimController,
+    PayslipCatalogController,
   ],
   providers: [
     PayslipCalculationService, 
     PayslipApprovalService, 
     PayslipRenderService, 
     ReviewWorkbookService, 
-    PayslipDashboardService, PayslipAuthorizationService
+    PayslipDashboardService, 
+    PayslipAuthorizationService,
+    PayslipCatalogService,
   ],
   exports: [
     PayslipCalculationService, 
     PayslipApprovalService, 
     ReviewWorkbookService, 
-    PayslipDashboardService
+    PayslipDashboardService,
+    PayslipAuthorizationService,
+    PayslipCatalogService,
   ],
 })
 export class PayslipModule {}

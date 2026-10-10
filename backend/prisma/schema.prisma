@@ -71,6 +71,7 @@ enum PayslipBatchStatus {
   DRAFT
   CALCULATED
   IN_REVIEW
+  PARTIALLY_APPROVED
   APPROVED
   REJECTED
 }
@@ -78,6 +79,7 @@ enum PayslipBatchStatus {
 enum PayslipStatus {
   CALCULATED
   IN_REVIEW
+  HELD
   APPROVED
   REJECTED
 }
@@ -135,6 +137,13 @@ model HrOfficer {
   payslipBatchesCreated PayslipBatch[] @relation("PayslipBatchesCreated")
   approvedPayslipBatches PayslipBatch[] @relation("PayslipBatchesApproved")
   payslipWorkloadClaims PayslipWorkloadClaim[]
+  payslipsReviewed           Payslip[]                @relation("PayslipsReviewed")
+  payslipsApproved           Payslip[]                @relation("PayslipsApproved")
+  payslipBatchesRejected     PayslipBatch[]           @relation("PayslipBatchesRejected")
+  payslipBatchApprovalsMade  PayslipBatchApproval[]   @relation("PayslipBatchApprovalsMade")
+  reviewWorkbooksExported    ReviewWorkbook[]         @relation("ReviewWorkbooksExported")
+  reviewWorkbookPreviewsCreated ReviewWorkbookPreview[] @relation("ReviewWorkbookPreviewsCreated")
+  payslipSettingsUpdated     PayslipSettings[]        @relation("PayslipSettingsUpdated")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -429,8 +438,15 @@ model PayslipBatch {
   approvedById String?
   approvedBy   HrOfficer? @relation("PayslipBatchesApproved", fields: [approvedById], references: [id], onDelete: SetNull)
 
+  rejectionReason String?
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectedBy      HrOfficer? @relation("PayslipBatchesRejected", fields: [rejectedById], references: [id], onDelete: SetNull)
+  approvals       PayslipBatchApproval[]
+
   payslips Payslip[]
   reviewWorkbooks ReviewWorkbook[]
+  previews        ReviewWorkbookPreview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -460,6 +476,15 @@ model Payslip {
   calculationOutputs Json
   reviewData         Json?
 
+  reviewedById       String?
+  reviewedBy         HrOfficer? @relation("PayslipsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewNote         String?
+  changedSinceReview Boolean    @default(false)
+  approvedById       String?
+  approvedBy         HrOfficer? @relation("PayslipsApproved", fields: [approvedById], references: [id], onDelete: SetNull)
+  contentHash        String?
+  carriedForward     Boolean    @default(false)
+
   reviewedAt DateTime?
   approvedAt DateTime?
 
@@ -479,6 +504,23 @@ model Payslip {
   @@index([status])
   @@index([createdAt])
   @@index([supersedesPayslipId])
+  @@index([payslipBatchId, status])
+}
+
+model PayslipBatchApproval {
+  id              String       @id @default(uuid())
+  payslipBatchId  String
+  payslipBatch    PayslipBatch @relation(fields: [payslipBatchId], references: [id], onDelete: Cascade)
+  approvedById    String
+  approvedBy      HrOfficer    @relation("PayslipBatchApprovalsMade", fields: [approvedById], references: [id], onDelete: Restrict)
+  batchVersion    Int
+  approvedCount   Int
+  unresolvedCount Int
+  partial         Boolean
+  reason          String?
+  createdAt       DateTime     @default(now())
+
+  @@index([payslipBatchId])
 }
 
 model AllowanceDefinition {
@@ -534,13 +576,48 @@ model ReviewWorkbook {
   payslipBatchId String
   payslipBatch   PayslipBatch @relation(fields: [payslipBatchId], references: [id], onDelete: Cascade)
 
+  batchVersion   Int?
+  batchStateHash String?
+  exportedById   String?
+  exportedBy     HrOfficer? @relation("ReviewWorkbooksExported", fields: [exportedById], references: [id], onDelete: SetNull)
+
   exportHash   String    @unique
   exportedAt   DateTime  @default(now())
   reuploadedAt DateTime?
   diff         Json?
+
+  previews ReviewWorkbookPreview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([payslipBatchId])
 }
+
+model ReviewWorkbookPreview {
+  id               String         @id @default(uuid())
+  payslipBatchId   String
+  payslipBatch     PayslipBatch   @relation(fields: [payslipBatchId], references: [id], onDelete: Cascade)
+  reviewWorkbookId String
+  reviewWorkbook   ReviewWorkbook @relation(fields: [reviewWorkbookId], references: [id], onDelete: Cascade)
+  createdById      String
+  createdBy        HrOfficer      @relation("ReviewWorkbookPreviewsCreated", fields: [createdById], references: [id], onDelete: Restrict)
+  fileHash         String
+  batchStateHash   String
+  payload          Json
+  expiresAt        DateTime
+  appliedAt        DateTime?
+  result           Json?
+  createdAt        DateTime       @default(now())
+
+  @@index([payslipBatchId, createdAt])
+}
+
+model PayslipSettings {
+  id                       String     @id @default("default")
+  varianceThresholdPercent Int        @default(20)
+  updatedById              String?
+  updatedBy                HrOfficer? @relation("PayslipSettingsUpdated", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt                DateTime   @updatedAt
+}
+
