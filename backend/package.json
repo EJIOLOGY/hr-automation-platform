@@ -23,6 +23,7 @@
     "seed:allowances": "ts-node scripts/seed-allowance-definitions.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1148.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",

@@ -30,6 +30,9 @@ import {
   PayslipPdfGenerationRequester,
   PayslipPdfRetentionPin,
 } from './pdf/payslip-pdf-reader.interface';
+import { PayslipEmailSenderService } from './email/payslip-email-sender.service';
+import { PayslipDeliveryWorkerService } from './email/payslip-delivery-worker.service';
+import { PayslipEmailDispatchController } from './email/payslip-email-dispatch.controller';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -41,6 +44,7 @@ import {
     PayslipClaimController,
     PayslipCatalogController,
     PayRunController,
+    PayslipEmailDispatchController,
   ],
   providers: [
     PayslipCalculationService,
@@ -49,6 +53,8 @@ import {
     PostgresPayslipPdfStorage,
     PdfGenerationService,
     PayslipPdfBundleService,
+    PayslipEmailSenderService,
+    PayslipDeliveryWorkerService,
     {
       provide: PayslipPdfReader,
       useExisting: PdfGenerationService,
@@ -91,6 +97,8 @@ import {
     PayslipPdfRetentionPin,
     PdfGenerationService,
     PayslipPdfBundleService,
+    PayslipEmailSenderService,
+    PayslipDeliveryWorkerService,
   ],
 })
 export class PayslipModule {}
