@@ -21,6 +21,15 @@ import { ReviewDecisionService } from './review/review-decision.service';
 import { PayslipCorrectionService } from './correction/payslip-correction.service';
 import { PayRunController } from './pay-run/pay-run.controller';
 import { PayRunService } from './pay-run/pay-run.service';
+import { PostgresPayslipPdfStorage } from './pdf/payslip-pdf-storage';
+import { PdfGenerationService } from './pdf/pdf-generation.service';
+import { PayslipPdfBundleService } from './pdf/payslip-pdf-bundle.service';
+import { PAYSLIP_POST_APPROVAL_HOOKS } from './shared/post-approval-hook';
+import {
+  PayslipPdfReader,
+  PayslipPdfGenerationRequester,
+  PayslipPdfRetentionPin,
+} from './pdf/payslip-pdf-reader.interface';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -37,6 +46,26 @@ import { PayRunService } from './pay-run/pay-run.service';
     PayslipCalculationService,
     PayslipApprovalService,
     PayslipRenderService,
+    PostgresPayslipPdfStorage,
+    PdfGenerationService,
+    PayslipPdfBundleService,
+    {
+      provide: PayslipPdfReader,
+      useExisting: PdfGenerationService,
+    },
+    {
+      provide: PayslipPdfGenerationRequester,
+      useExisting: PdfGenerationService,
+    },
+    {
+      provide: PayslipPdfRetentionPin,
+      useExisting: PdfGenerationService,
+    },
+    {
+      provide: PAYSLIP_POST_APPROVAL_HOOKS,
+      useFactory: (pdfGen: PdfGenerationService) => [pdfGen],
+      inject: [PdfGenerationService],
+    },
     ReviewWorkbookService,
     ReviewWorkbookPreviewService,
     ReviewDecisionService,
@@ -57,7 +86,13 @@ import { PayRunService } from './pay-run/pay-run.service';
     PayslipAuthorizationService,
     PayslipCatalogService,
     PayRunService,
+    PayslipPdfReader,
+    PayslipPdfGenerationRequester,
+    PayslipPdfRetentionPin,
+    PdfGenerationService,
+    PayslipPdfBundleService,
   ],
 })
 export class PayslipModule {}
+
 

@@ -1,7 +1,7 @@
 export const PAYSLIP_AUDIT_ACTOR = 'HR_OFFICER';
 
 export interface PayslipAuditMetadataInput {
-  companyId: string;
+  companyId?: string;
   periodId: string;
   batchId?: string;
   uploadId?: string;
@@ -12,9 +12,10 @@ export interface PayslipAuditMetadataInput {
 
 export function payslipAuditMetadata(input: PayslipAuditMetadataInput): Record<string, unknown> {
   const result: Record<string, unknown> = {
-    companyId: input.companyId,
     periodId: input.periodId,
   };
+
+  if (input.companyId !== undefined) result.companyId = input.companyId;
 
   if (input.batchId !== undefined) result.batchId = input.batchId;
   if (input.uploadId !== undefined) result.uploadId = input.uploadId;
