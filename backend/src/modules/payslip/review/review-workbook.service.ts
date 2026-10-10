@@ -7,8 +7,23 @@ import { PayslipBatchStatus, PayslipStatus, Prisma } from '../../../generated/pr
 import { calculatePayslip, CANONICAL_ALLOWANCES } from '../calculation/calculation-engine';
 import type { CalculationInputs } from '../calculation/calculation.types';
 import { PayslipDashboardService } from '../dashboard/payslip-dashboard.service';
+import { computePayslipFlags } from '../shared/flags';
 
 export interface ReviewActor { actorType: string; actorHrOfficerId: string; }
+
+const FALLBACK_PROTECTION_PASSWORD = 'hrreview2026';
+
+/**
+ * Computes a deterministic hash of the current batch payslip state.
+ * Sorted by staffId so the hash is stable regardless of DB row order.
+ * Used to detect if the batch changed between workbook export and apply.
+ */
+export function computeBatchStateHash(payslips: Array<{ staffId: string; contentHash: string | null; status: string }>): string {
+  const sorted = [...payslips].sort((a, b) => a.staffId.localeCompare(b.staffId));
+  const payload = sorted.map((p) => `${p.staffId}:${p.contentHash ?? ''}:${p.status}`).join('|');
+  return createHash('sha256').update(payload).digest('hex');
+}
+
 export interface ReviewImportResult {
   workbookId: string;
   approved: number;
@@ -55,32 +70,59 @@ export class ReviewWorkbookService {
             employee: { select: { fullName: true, jobTitle: true, department: true } },
             lines: { include: { allowanceDefinition: true } },
           },
+          orderBy: { staffId: 'asc' },
         },
       },
     });
 
     if (!batch) throw new NotFoundException('Batch not found');
 
+    const password = process.env['PAYSLIP_REVIEW_WORKBOOK_PROTECTION_PASSWORD'] ?? FALLBACK_PROTECTION_PASSWORD;
+
     const workbook = new ExcelJS.Workbook();
-    
+
     // Sheet 1: Payslips
+    // Column layout (1-indexed):
+    //  1  PayslipID   – locked, hidden (identity key for import)
+    //  2  StaffID     – locked
+    //  3  ReviewStatus – locked (current status snapshot)
+    //  4  EmployeeName – locked
+    //  5  JobTitle    – locked
+    //  6  Department  – locked
+    //  7  DaysWorked  – EDITABLE
+    //  8  TotalDays   – EDITABLE
+    //  9  DaysAbsent  – EDITABLE
+    // 10  BaseFee     – EDITABLE
+    // 11  OtherDeduction – EDITABLE
+    // 12  GrossPay    – locked
+    // 13  GrossEarnings – locked
+    // 14  WHT         – locked
+    // 15  NetServiceFee – locked
+    // 16  ReviewNotes – EDITABLE
+    // 17  HRDecision  – EDITABLE
+    // 18  Flags       – locked (flag codes computed at export time)
+    const EDITABLE_COLS = new Set([7, 8, 9, 10, 11, 16, 17]);
+
     const ws = workbook.addWorksheet('Payslips');
     ws.columns = [
-      { header: 'StaffID', key: 'staffId', width: 15 },
-      { header: 'EmployeeName', key: 'employeeName', width: 25 },
-      { header: 'JobTitle', key: 'jobTitle', width: 20 },
-      { header: 'Department', key: 'department', width: 20 },
-      { header: 'DaysWorked', key: 'daysWorked', width: 15 },
-      { header: 'TotalDays', key: 'totalDays', width: 15 },
-      { header: 'DaysAbsent', key: 'daysAbsent', width: 15 },
-      { header: 'BaseFee', key: 'baseFee', width: 15 },
+      { header: 'PayslipID',     key: 'payslipId',      width: 5,  hidden: true },
+      { header: 'StaffID',       key: 'staffId',        width: 15 },
+      { header: 'ReviewStatus',  key: 'reviewStatus',   width: 15 },
+      { header: 'EmployeeName',  key: 'employeeName',   width: 25 },
+      { header: 'JobTitle',      key: 'jobTitle',       width: 20 },
+      { header: 'Department',    key: 'department',     width: 20 },
+      { header: 'DaysWorked',    key: 'daysWorked',     width: 15 },
+      { header: 'TotalDays',     key: 'totalDays',      width: 15 },
+      { header: 'DaysAbsent',    key: 'daysAbsent',     width: 15 },
+      { header: 'BaseFee',       key: 'baseFee',        width: 15 },
       { header: 'OtherDeduction', key: 'otherDeduction', width: 18 },
-      { header: 'GrossPay', key: 'grossPay', width: 15 },
-      { header: 'GrossEarnings', key: 'grossEarnings', width: 15 },
-      { header: 'WHT', key: 'wht', width: 15 },
-      { header: 'NetServiceFee', key: 'netServiceFee', width: 15 },
-      { header: 'ReviewNotes', key: 'reviewNotes', width: 30 },
-      { header: 'HRDecision', key: 'hrDecision', width: 15 },
+      { header: 'GrossPay',      key: 'grossPay',       width: 15 },
+      { header: 'GrossEarnings', key: 'grossEarnings',  width: 15 },
+      { header: 'WHT',           key: 'wht',            width: 15 },
+      { header: 'NetServiceFee', key: 'netServiceFee',  width: 15 },
+      { header: 'ReviewNotes',   key: 'reviewNotes',    width: 30 },
+      { header: 'HRDecision',    key: 'hrDecision',     width: 15 },
+      { header: 'Flags',         key: 'flags',          width: 20 },
     ];
 
     ws.getRow(1).font = { bold: true };
@@ -89,9 +131,30 @@ export class ReviewWorkbookService {
     for (const payslip of batch.payslips) {
       const outputs = (payslip.calculationOutputs as Record<string, unknown>) || {};
       const inputs = (payslip.calculationInputs as Record<string, unknown>) || {};
-      
+      const lines = payslip.lines.map((l) => ({
+        name: l.allowanceDefinition?.canonicalName ?? l.name,
+        kind: l.kind as 'ALLOWANCE' | 'DEDUCTION',
+        amount: Number(l.amount),
+        taxClass: l.taxClass as 'TAXABLE' | 'EXEMPT',
+        sortOrder: l.sortOrder,
+      }));
+      const flags = computePayslipFlags(
+        {
+          netServiceFee: Number(outputs['netServiceFee'] ?? 0),
+          daysWorked: Number(inputs['daysWorked'] ?? 0),
+          totalDays: Number(inputs['totalDays'] ?? 0),
+          otherDeduction: Number(inputs['otherDeduction'] ?? 0),
+          changedSinceReview: payslip.changedSinceReview ?? false,
+        },
+        null,   // no previous approved payslip lookup during export
+        20,     // default threshold — overridden by PayslipSettings in approval flow
+      );
+      const flagDisplay = flags.map((f) => f.code).join(', ');
+
       const row = ws.addRow({
+        payslipId: payslip.id,
         staffId: payslip.staffId,
+        reviewStatus: payslip.status,
         employeeName: payslip.employee?.fullName ?? '',
         jobTitle: payslip.employee?.jobTitle ?? '',
         department: payslip.employee?.department ?? '',
@@ -106,6 +169,7 @@ export class ReviewWorkbookService {
         netServiceFee: Number(outputs['netServiceFee'] ?? 0),
         reviewNotes: '',
         hrDecision: '',
+        flags: flagDisplay,
       });
 
       row.getCell('hrDecision').dataValidation = {
@@ -115,18 +179,15 @@ export class ReviewWorkbookService {
       };
     }
 
-    await ws.protect('hrreview2026', { selectLockedCells: true, selectUnlockedCells: true });
-
+    // Apply cell protection before sheet-level protect call
     ws.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
       row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        if ([5, 6, 7, 8, 14, 15].includes(colNumber)) {
-          cell.protection = { locked: false };
-        } else {
-          cell.protection = { locked: true };
-        }
+        cell.protection = { locked: !EDITABLE_COLS.has(colNumber) };
       });
     });
+
+    await ws.protect(password, { selectLockedCells: true, selectUnlockedCells: true });
 
     // Sheet 2: LineItems
     const wsLines = workbook.addWorksheet('LineItems');
@@ -155,16 +216,22 @@ export class ReviewWorkbookService {
         cell.protection = { locked: rowNumber === 1 || colNumber !== 5 };
       });
     });
-    await wsLines.protect('hrreview2026', { selectLockedCells: true, selectUnlockedCells: true });
+    await wsLines.protect(password, { selectLockedCells: true, selectUnlockedCells: true });
 
     const buf = Buffer.from(await workbook.xlsx.writeBuffer());
     const exportHash = createHash('sha256').update(buf).digest('hex');
+    const batchStateHash = computeBatchStateHash(
+      batch.payslips.map((p) => ({ staffId: p.staffId, contentHash: p.contentHash, status: p.status })),
+    );
 
     await this.prisma.reviewWorkbook.create({
       data: {
         payslipBatchId: batchId,
         exportHash,
         exportedAt: new Date(),
+        batchVersion: batch.version,
+        batchStateHash,
+        exportedById: actor.actorHrOfficerId,
       },
     });
 
@@ -174,7 +241,7 @@ export class ReviewWorkbookService {
       action: 'PAYSLIP_REVIEW_WORKBOOK_EXPORTED',
       entityType: 'PAYSLIP_BATCH',
       entityId: batchId,
-      metadata: { exportHash },
+      metadata: { exportHash, batchVersion: batch.version, batchStateHash },
     });
 
     return buf;
