@@ -3,6 +3,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { PhoneNumberNormalizer } from '../../shared/utils/phone-number-normalizer';
 import { AuditService } from '../audit/audit.service';
 import { deriveDepartment } from './department-from-designation';
+import { isEmailValid, maskEmail, normalizeEmail } from './email-utils';
 import {
   EmployeeImportParseError,
   parseEmployeeSpreadsheet,
@@ -44,9 +45,10 @@ export class EmployeeImportService {
 
     const results: ImportRowResult[] = [];
     const seenEmployeeNumbers = new Set<string>();
+    const seenEmails = new Set<string>();
 
     for (const { row, data } of parsed.rows) {
-      const result = await this.importRow(row, data, seenEmployeeNumbers);
+      const result = await this.importRow(row, data, seenEmployeeNumbers, seenEmails);
 
       results.push(result);
     }
@@ -59,6 +61,7 @@ export class EmployeeImportService {
       needsDepartmentReview: results.filter(
         (result) => result.departmentNeedsReview,
       ).length,
+      emailWarnings: results.filter((result) => result.emailWarning !== undefined).length,
       results,
     };
 
@@ -90,6 +93,7 @@ export class EmployeeImportService {
       phoneNumber: string | undefined;
     },
     seenEmployeeNumbers: Set<string>,
+    seenEmails: Set<string>,
   ): Promise<ImportRowResult> {
     if (!data.employeeNumber) {
       return {
@@ -160,6 +164,27 @@ export class EmployeeImportService {
       };
     }
 
+    // ── Email validation (non-fatal) ─────────────────────────────────────────
+    let resolvedEmail: string | undefined;
+    let emailWarning: ImportRowResult['emailWarning'];
+
+    if (data.email) {
+      const normalized = normalizeEmail(data.email);
+
+      if (seenEmails.has(normalized)) {
+        emailWarning = 'DUPLICATE_EMAIL';
+        // Do NOT add to set — we already have it; just warn and skip persisting.
+      } else {
+        const valid = await isEmailValid(normalized);
+        if (!valid) {
+          emailWarning = 'INVALID_EMAIL';
+        } else {
+          resolvedEmail = normalized;
+          seenEmails.add(normalized);
+        }
+      }
+    }
+
     const { department, matched } = deriveDepartment(data.designation);
 
     const upsertInput: EmployeeUpsertInput = {
@@ -169,6 +194,9 @@ export class EmployeeImportService {
       department,
       jobTitle: data.designation ?? 'Unspecified',
       status: 'ACTIVE',
+      ...(resolvedEmail !== undefined
+        ? { email: resolvedEmail, emailUpdatedAt: new Date() }
+        : {}),
     };
 
     try {
@@ -178,8 +206,13 @@ export class EmployeeImportService {
         },
         select: {
           id: true,
+          email: true,
         },
       });
+
+      // Only stamp emailUpdatedAt when the email value actually changes
+      const emailChanged =
+        resolvedEmail !== undefined && existing?.email !== resolvedEmail;
 
       await this.prisma.employee.upsert({
         where: {
@@ -191,6 +224,12 @@ export class EmployeeImportService {
           phoneNumber: upsertInput.phoneNumber,
           department: upsertInput.department,
           jobTitle: upsertInput.jobTitle,
+          ...(resolvedEmail !== undefined
+            ? {
+                email: resolvedEmail,
+                ...(emailChanged ? { emailUpdatedAt: new Date() } : {}),
+              }
+            : {}),
         },
       });
 
@@ -199,6 +238,10 @@ export class EmployeeImportService {
         outcome: existing ? 'updated' : 'created',
         employeeNumber: upsertInput.employeeNumber,
         departmentNeedsReview: !matched,
+        ...(emailWarning !== undefined ? { emailWarning } : {}),
+        ...(resolvedEmail !== undefined
+          ? { email: maskEmail(resolvedEmail) }
+          : {}),
       };
     } catch (error) {
       return {

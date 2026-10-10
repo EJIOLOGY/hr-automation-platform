@@ -1,6 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { PayslipStatus } from '../../../generated/prisma/client';
+import {
+  PayslipPdfGenerationRequester,
+  PayslipPdfReader,
+  PayslipPdfReaderResult,
+} from '../pdf/payslip-pdf-reader.interface';
 
 export interface PayslipSummaryForWhatsApp {
   payslipId: string;
@@ -16,7 +21,25 @@ export interface PayslipSummaryForWhatsApp {
 export class WhatsAppPayslipService {
   private readonly logger = new Logger(WhatsAppPayslipService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly pdfReader?: PayslipPdfReader,
+    @Optional() private readonly pdfRequester?: PayslipPdfGenerationRequester,
+  ) {}
+
+  /**
+   * Retrieves ready PDF bytes via PayslipPdfReader, or triggers generation via PayslipPdfGenerationRequester.
+   */
+  async getPayslipPdfBytes(payslipId: string): Promise<PayslipPdfReaderResult | null> {
+    if (!this.pdfReader) {
+      return null;
+    }
+    const result = await this.pdfReader.getReady(payslipId);
+    if (result.status !== 'READY' && this.pdfRequester) {
+      void this.pdfRequester.request([payslipId]);
+    }
+    return result;
+  }
 
   /**
    * Find the latest approved payslip for an employee by staffId.

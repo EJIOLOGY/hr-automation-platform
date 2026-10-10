@@ -21,6 +21,10 @@ export interface EmployeeUpsertInput {
   department: string;
   jobTitle: string;
   status: EmployeeStatus;
+  /** Validated email from the spreadsheet, if present and valid. */
+  email?: string;
+  /** Timestamp of last email field write — set whenever email changes. */
+  emailUpdatedAt?: Date;
 }
 
 export type ImportRowOutcome = 'created' | 'updated' | 'error';
@@ -37,6 +41,9 @@ export interface ImportRowResult {
 
   error?: string;
 
+  /** Non-fatal email problem (INVALID_EMAIL | DUPLICATE_EMAIL). Row still processed. */
+  emailWarning?: 'INVALID_EMAIL' | 'DUPLICATE_EMAIL';
+
   departmentNeedsReview?: boolean;
 }
 
@@ -46,5 +53,6 @@ export interface EmployeeImportReport {
   updated: number;
   failed: number;
   needsDepartmentReview: number;
+  emailWarnings: number;
   results: ImportRowResult[];
 }

@@ -23,6 +23,7 @@
     "seed:allowances": "ts-node scripts/seed-allowance-definitions.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1148.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
@@ -35,6 +36,7 @@
     "@nestjs/websockets": "11.0.1",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "archiver": "7.0.1",
     "axios": "^1.19.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
@@ -63,6 +65,7 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@types/archiver": "^8.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/dotenv": "^8.2.3",
     "@types/express": "^5.0.0",

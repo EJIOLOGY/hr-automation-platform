@@ -104,6 +104,8 @@ model Employee {
   phoneNumber    String         @unique
   department     String
   jobTitle       String
+  email          String?
+  emailUpdatedAt DateTime?
   status         EmployeeStatus @default(ACTIVE)
 
   sessions    ChatSession[]
@@ -111,12 +113,14 @@ model Employee {
   analyticsEvents AnalyticsEvent[]
   billingRateRows BillingRateRow[]
   payslips        Payslip[]
+  deliveries      PayslipDelivery[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([employeeNumber])
   @@index([phoneNumber])
+  @@index([email])
 }
 
 model HrOfficer {
@@ -144,6 +148,10 @@ model HrOfficer {
   reviewWorkbooksExported    ReviewWorkbook[]         @relation("ReviewWorkbooksExported")
   reviewWorkbookPreviewsCreated ReviewWorkbookPreview[] @relation("ReviewWorkbookPreviewsCreated")
   payslipSettingsUpdated     PayslipSettings[]        @relation("PayslipSettingsUpdated")
+  payslipDispatchesCreated   PayslipEmailDispatch[]   @relation("PayslipDispatchesCreated")
+  payslipDispatchesApproved  PayslipEmailDispatch[]   @relation("PayslipDispatchesApproved")
+  emailSuppressionsAcknowledged EmailSuppression[]    @relation("EmailSuppressionsAcknowledged")
+  emailSuppressionsResolved    EmailSuppression[]      @relation("EmailSuppressionsResolved")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -447,6 +455,7 @@ model PayslipBatch {
   payslips Payslip[]
   reviewWorkbooks ReviewWorkbook[]
   previews        ReviewWorkbookPreview[]
+  emailDispatches PayslipEmailDispatch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -488,7 +497,9 @@ model Payslip {
   reviewedAt DateTime?
   approvedAt DateTime?
 
-  lines PayslipLine[]
+  lines      PayslipLine[]
+  pdf        PayslipPdf?
+  deliveries PayslipDelivery[]
 
   supersedesPayslipId String?
   supersedesPayslip   Payslip?  @relation("PayslipVersions", fields: [supersedesPayslipId], references: [id], onDelete: Restrict)
@@ -620,4 +631,224 @@ model PayslipSettings {
   updatedBy                HrOfficer? @relation("PayslipSettingsUpdated", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt                DateTime   @updatedAt
 }
+
+enum PayslipPdfStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+  EXPIRED
+}
+
+model PayslipPdfBlob {
+  id              String       @id @default(uuid())
+  contentHash     String
+  templateVersion String
+  bytes           Bytes
+  sizeBytes       Int
+  sha256          String
+  createdAt       DateTime     @default(now())
+  pdfs            PayslipPdf[]
+
+  @@unique([contentHash, templateVersion])
+}
+
+model PayslipPdf {
+  id           String           @id @default(uuid())
+  payslipId    String           @unique
+  payslip      Payslip          @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  status       PayslipPdfStatus @default(PENDING)
+  blobId       String?
+  blob         PayslipPdfBlob?  @relation(fields: [blobId], references: [id], onDelete: Restrict)
+  attempts     Int              @default(0)
+  errorMessage String?
+  generatedAt  DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([status])
+  @@index([expiresAt])
+}
+
+enum PayslipDeliveryStatus {
+  PENDING
+  PROCESSING
+  SUBMITTED
+  DELIVERED
+  DELIVERY_DELAYED
+  RETRY_SCHEDULED
+  BOUNCED_SOFT
+  BOUNCED_HARD
+  COMPLAINED
+  REJECTED
+  FAILED
+  SUBMISSION_UNKNOWN
+  SKIPPED
+  CANCELLED
+}
+
+enum PayslipDeliveryAttemptOutcome {
+  ACCEPTED
+  CONFIRMED_FAILURE
+  SUBMISSION_UNKNOWN
+}
+
+enum PayslipDeliveryAttemptTrigger {
+  AUTOMATIC
+  MANUAL
+}
+
+enum PayslipEmailDispatchStatus {
+  PENDING_APPROVAL
+  APPROVED
+  SENDING
+  PAUSED
+  COMPLETED
+  COMPLETED_WITH_FAILURES
+  CANCELLED
+}
+
+enum PayslipEmailDispatchMode {
+  LIVE
+  TEST
+}
+
+enum EmailSuppressionReason {
+  HARD_BOUNCE
+  COMPLAINT
+  SES_ACCOUNT_LIST
+}
+
+enum EmailSuppressionStatus {
+  ACTIVE
+  RESOLVED
+}
+
+model PayslipEmailDispatch {
+  id                    String                     @id @default(uuid())
+  payslipBatchId        String
+  payslipBatch          PayslipBatch               @relation(fields: [payslipBatchId], references: [id], onDelete: Restrict)
+  status                PayslipEmailDispatchStatus @default(PENDING_APPROVAL)
+  mode                  PayslipEmailDispatchMode   @default(LIVE)
+  createdById           String
+  createdBy             HrOfficer                  @relation("PayslipDispatchesCreated", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById          String?
+  approvedBy            HrOfficer?                 @relation("PayslipDispatchesApproved", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt            DateTime?
+  recipientCount        Int
+  skippedCount          Int
+  includeCarriedForward Boolean                    @default(false)
+  pauseReason           String?
+  blockedReason         String?
+  completedAt           DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  deliveries            PayslipDelivery[]
+
+  @@index([payslipBatchId])
+  @@index([status])
+}
+
+model PayslipDelivery {
+  id                     String                 @id @default(uuid())
+  payslipId              String
+  payslip                Payslip                @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  payslipBatchId         String
+  accountingCompanyId    String
+  payrollPeriodId        String
+  employeeId             String?
+  employee               Employee?              @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  dispatchId             String?
+  dispatch               PayslipEmailDispatch?  @relation(fields: [dispatchId], references: [id], onDelete: SetNull)
+  status                 PayslipDeliveryStatus  @default(PENDING)
+  isTest                 Boolean                @default(false)
+  isCorrection           Boolean                @default(false)
+  correctsDeliveryId     String?
+  recipientEmailSnapshot String?
+  recipientMasked        String?
+  contentHash            String?
+  attemptCount           Int                    @default(0)
+  autoRetryCount         Int                    @default(0)
+  softBounceRetryCount   Int                    @default(0)
+  sesMessageId           String?
+  submittedAt            DateTime?
+  deliveredAt            DateTime?
+  bouncedAt              DateTime?
+  lastAttemptAt          DateTime?
+  lastEventAt            DateTime?
+  nextAttemptAt          DateTime?
+  claimedAt              DateTime?
+  claimedBy              String?
+  lastErrorCode          String?
+  lastErrorMessage       String?
+  skipReason             String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  attempts               PayslipDeliveryAttempt[]
+
+  @@index([payslipBatchId, status])
+  @@index([dispatchId, status])
+  @@index([status, nextAttemptAt])
+  @@index([sesMessageId])
+}
+
+model PayslipDeliveryAttempt {
+  id                     String                         @id @default(uuid())
+  deliveryId             String
+  delivery               PayslipDelivery                @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  attemptNumber          Int
+  trigger                PayslipDeliveryAttemptTrigger
+  triggeredByHrOfficerId String?
+  startedAt              DateTime
+  finishedAt             DateTime?
+  outcome                PayslipDeliveryAttemptOutcome?
+  sesMessageId           String?
+  errorCode              String?
+  errorMessage           String?
+  createdAt              DateTime                       @default(now())
+
+  @@unique([deliveryId, attemptNumber])
+}
+
+model SesNotificationEvent {
+  id                String    @id @default(uuid())
+  snsMessageId      String    @unique
+  eventType         String
+  sesMessageId      String?
+  deliveryId        String?
+  eventTimestamp    DateTime?
+  receivedAt        DateTime  @default(now())
+  processedAt       DateTime?
+  processingOutcome String?
+  processingError   String?
+  minimalPayload    Json
+
+  @@index([sesMessageId])
+  @@index([deliveryId])
+  @@index([processedAt])
+}
+
+model EmailSuppression {
+  id                    String                 @id @default(uuid())
+  emailNormalized       String
+  emailMasked           String
+  reason                EmailSuppressionReason
+  status                EmailSuppressionStatus @default(ACTIVE)
+  detail                String?
+  createdFromDeliveryId String?
+  acknowledgedById      String?
+  acknowledgedBy        HrOfficer?             @relation("EmailSuppressionsAcknowledged", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  acknowledgedAt        DateTime?
+  resolvedById          String?
+  resolvedBy            HrOfficer?             @relation("EmailSuppressionsResolved", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt            DateTime?
+  resolutionNote        String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@index([emailNormalized, status])
+  @@index([status, acknowledgedAt])
+}
+
 

@@ -213,4 +213,23 @@ export class PayslipAuthorizationService {
     );
     return payslip;
   }
+
+  /**
+   * Asserts that an actor can access a whole period download.
+   * ADMIN always passes. OFFICER must hold active claims on ALL included workloads.
+   */
+  async assertPeriodClaims(periodId: string, actor: PayslipActor): Promise<void> {
+    if (actor.role === HrOfficerRole.ADMIN) return;
+
+    // Find all companies with batches in this period
+    const batches = await this.prisma.payslipBatch.findMany({
+      where: { payrollPeriodId: periodId },
+      select: { accountingCompanyId: true },
+      distinct: ['accountingCompanyId'],
+    });
+
+    for (const batch of batches) {
+      await this.assertCompanyPeriod(batch.accountingCompanyId, periodId, actor);
+    }
+  }
 }
