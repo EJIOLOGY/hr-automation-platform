@@ -102,20 +102,5 @@ export class ReviewWorkbookController {
       actorHrOfficerId: user.id,
     });
   }
-
-  /** Legacy import endpoint — kept for backwards-compatibility. */
-  @Post('batches/:batchId/review-workbook')
-  @UseInterceptors(FileInterceptor('file'))
-  async importWorkbook(
-    @Param('batchId', new ParseUUIDPipe()) batchId: string,
-    @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    await this.authorization.assertBatch(batchId, user);
-    return this.reviewService.importReviewWorkbook(batchId, file.buffer, {
-      actorType: 'HR_OFFICER',
-      actorHrOfficerId: user.id,
-    });
-  }
 }
 

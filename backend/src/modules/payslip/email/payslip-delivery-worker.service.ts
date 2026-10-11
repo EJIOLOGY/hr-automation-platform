@@ -1,51 +1,80 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnApplicationShutdown,
+} from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
-import { PayslipEmailSenderService } from './payslip-email-sender.service';
+import { PayslipEmailSenderService, SendOutcome } from './payslip-email-sender.service';
+import { DispatchHealthService } from './dispatch-health.service';
 import {
   PayslipDeliveryAttemptTrigger,
   PayslipDeliveryStatus,
   PayslipEmailDispatchStatus,
 } from '../../../generated/prisma/client';
+import { runPayslipTransaction } from '../shared/payslip-transaction';
 
 const MAX_AUTO_RETRIES = 3;
-// Backoff delays in milliseconds: 1m, 5m, 15m
+// Backoff delays: attempt 1 -> 60s, attempt 2 -> 300s (5m), attempt 3 -> 900s (15m)
 const RETRY_BACKOFF_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000];
 
 @Injectable()
-export class PayslipDeliveryWorkerService implements OnModuleInit {
+export class PayslipDeliveryWorkerService
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
   private readonly logger = new Logger(PayslipDeliveryWorkerService.name);
-  private isProcessing = false;
+  private isRunning = false;
+  private shouldStop = false;
+  private readonly instanceId = `worker-${process.pid}-${Math.random().toString(36).slice(2, 7)}`;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly sender: PayslipEmailSenderService,
+    private readonly healthService: DispatchHealthService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
+  async onApplicationBootstrap(): Promise<void> {
     await this.recoverStuckProcessing();
+
+    const enabled = process.env.PAYSLIP_WORKER_ENABLED !== 'false';
+    if (enabled) {
+      this.startPollingLoop();
+    } else {
+      this.logger.log('PAYSLIP_WORKER_ENABLED is false; delivery worker polling loop disabled.');
+    }
+  }
+
+  onApplicationShutdown(): void {
+    this.shouldStop = true;
+    this.logger.log('Shutting down delivery worker loop.');
   }
 
   /**
-   * Resets deliveries stuck in PROCESSING for > 5 minutes back to PENDING.
+   * Resets deliveries stuck in PROCESSING for > PAYSLIP_PROCESSING_TIMEOUT_SECONDS (default 300)
+   * to SUBMISSION_UNKNOWN (at-most-once delivery: never returned to PENDING).
    */
   async recoverStuckProcessing(): Promise<void> {
     try {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const timeoutSec = Number(process.env.PAYSLIP_PROCESSING_TIMEOUT_SECONDS) || 300;
+      const timeoutAgo = new Date(Date.now() - timeoutSec * 1000);
+
       const result = await this.prisma.payslipDelivery.updateMany({
         where: {
           status: PayslipDeliveryStatus.PROCESSING,
-          updatedAt: { lt: fiveMinutesAgo },
+          claimedAt: { lt: timeoutAgo },
         },
         data: {
-          status: PayslipDeliveryStatus.PENDING,
+          status: PayslipDeliveryStatus.SUBMISSION_UNKNOWN,
           claimedAt: null,
           claimedBy: null,
+          lastErrorCode: 'PROCESSING_TIMEOUT_RECOVERED',
+          lastErrorMessage: `Delivery was stuck in PROCESSING for more than ${timeoutSec} seconds. Marked SUBMISSION_UNKNOWN.`,
         },
       });
 
       if (result.count > 0) {
         this.logger.warn(
-          `Recovered ${result.count} stuck PROCESSING deliveries back to PENDING.`,
+          `Recovered ${result.count} stuck PROCESSING deliveries as SUBMISSION_UNKNOWN.`,
         );
       }
     } catch (err: any) {
@@ -56,140 +85,253 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
   }
 
   /**
-   * Process a single batch of eligible deliveries.
-   * Can be triggered on dispatch approval, cron/heartbeat, or manual retry.
+   * Polling loop running while application is active.
    */
-  async processNextDeliveries(limit = 20): Promise<number> {
-    if (this.isProcessing) {
+  private startPollingLoop(): void {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    this.shouldStop = false;
+
+    void (async () => {
+      this.logger.log(`Delivery worker polling loop started (instance: ${this.instanceId}).`);
+      const idleMs = Number(process.env.PAYSLIP_WORKER_IDLE_MS) || 5000;
+
+      while (!this.shouldStop) {
+        try {
+          const processedCount = await this.claimAndProcessBatch(1);
+          if (processedCount === 0) {
+            await this.sleep(idleMs);
+          }
+        } catch (err: any) {
+          this.logger.error(`Error in delivery worker loop: ${err?.message || err}`);
+          // Jittered backoff on unexpected infrastructure errors
+          const jitter = Math.floor(Math.random() * 2000) + 1000;
+          await this.sleep(jitter);
+        }
+      }
+      this.isRunning = false;
+      this.logger.log('Delivery worker polling loop stopped.');
+    })();
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Claims a batch of deliveries with FOR UPDATE SKIP LOCKED and processes them.
+   */
+  async claimAndProcessBatch(batchSize = 1): Promise<number> {
+    // 1. Claim items atomically using FOR UPDATE SKIP LOCKED in a short ROW transaction
+    const claimedRows = await runPayslipTransaction(this.prisma, 'ROW', async (tx) => {
+      // Find candidate IDs
+      const rawCandidates = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT d.id
+         FROM "PayslipDelivery" d
+         JOIN "PayslipEmailDispatch" ped ON d."dispatchId" = ped.id
+         WHERE (d.status = 'PENDING' OR d.status = 'RETRY_SCHEDULED')
+           AND (d."nextAttemptAt" IS NULL OR d."nextAttemptAt" <= NOW())
+           AND (ped.status = 'APPROVED' OR ped.status = 'SENDING')
+         ORDER BY d."nextAttemptAt" ASC NULLS FIRST, d.id ASC
+         FOR UPDATE SKIP LOCKED
+         LIMIT $1`,
+        batchSize,
+      );
+
+      if (!rawCandidates || rawCandidates.length === 0) {
+        return [];
+      }
+
+      const ids = rawCandidates.map((c) => c.id);
+
+      await tx.$executeRawUnsafe(
+        `UPDATE "PayslipDelivery"
+         SET status = 'PROCESSING', "claimedAt" = NOW(), "claimedBy" = $1
+         WHERE id = ANY($2::text[])`,
+        this.instanceId,
+        ids,
+      );
+
+      return ids;
+    });
+
+    if (!claimedRows || claimedRows.length === 0) {
       return 0;
     }
-    this.isProcessing = true;
 
-    try {
-      const now = new Date();
+    // Process claimed deliveries outside the transaction (Rule 15: no network calls inside transactions)
+    for (const deliveryId of claimedRows) {
+      await this.processSingleDelivery(deliveryId);
+    }
 
-      // Find deliveries that belong to active dispatches and are ready for processing
-      // Status can be PENDING or RETRY_SCHEDULED where nextAttemptAt <= now
-      const eligibleDeliveries = await this.prisma.payslipDelivery.findMany({
-        where: {
-          status: {
-            in: [
-              PayslipDeliveryStatus.PENDING,
-              PayslipDeliveryStatus.RETRY_SCHEDULED,
-            ],
-          },
-          OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
-          dispatch: {
-            status: {
-              in: [
-                PayslipEmailDispatchStatus.APPROVED,
-                PayslipEmailDispatchStatus.SENDING,
-              ],
-            },
-          },
-        },
-        take: limit,
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          dispatchId: true,
-          autoRetryCount: true,
-          status: true,
+    return claimedRows.length;
+  }
+
+  /**
+   * Processes a claimed delivery.
+   */
+  private async processSingleDelivery(deliveryId: string): Promise<void> {
+    const delivery = await this.prisma.payslipDelivery.findUnique({
+      where: { id: deliveryId },
+      include: { dispatch: true },
+    });
+
+    if (!delivery) return;
+
+    // If dispatch is PAUSED or CANCELLED, handle accordingly
+    if (delivery.dispatch && delivery.dispatch.status === 'PAUSED') {
+      await this.prisma.payslipDelivery.update({
+        where: { id: deliveryId },
+        data: {
+          status: PayslipDeliveryStatus.PENDING,
+          claimedAt: null,
+          claimedBy: null,
         },
       });
+      return;
+    }
 
-      if (eligibleDeliveries.length === 0) {
-        return 0;
-      }
+    if (delivery.dispatch && delivery.dispatch.status === 'CANCELLED') {
+      await this.prisma.payslipDelivery.update({
+        where: { id: deliveryId },
+        data: {
+          status: PayslipDeliveryStatus.CANCELLED,
+          claimedAt: null,
+          claimedBy: null,
+        },
+      });
+      return;
+    }
 
-      // Mark their dispatches as SENDING if they were APPROVED
-      const dispatchIds = Array.from(
-        new Set(eligibleDeliveries.map((d) => d.dispatchId).filter(Boolean)),
-      ) as string[];
-      if (dispatchIds.length > 0) {
-        await this.prisma.payslipEmailDispatch.updateMany({
-          where: {
-            id: { in: dispatchIds },
-            status: PayslipEmailDispatchStatus.APPROVED,
-          },
-          data: {
-            status: PayslipEmailDispatchStatus.SENDING,
-          },
-        });
-      }
+    // Mark dispatch as SENDING if it was APPROVED
+    if (delivery.dispatchId && delivery.dispatch?.status === 'APPROVED') {
+      await this.prisma.payslipEmailDispatch.update({
+        where: { id: delivery.dispatchId },
+        data: { status: PayslipEmailDispatchStatus.SENDING },
+      });
+    }
 
-      let processedCount = 0;
+    // Execute send
+    const outcome = await this.sender.sendDelivery(
+      deliveryId,
+      PayslipDeliveryAttemptTrigger.AUTOMATIC,
+    );
 
-      for (const item of eligibleDeliveries) {
-        // Mark as PROCESSING with lock
-        const claimed = await this.prisma.payslipDelivery.updateMany({
-          where: {
-            id: item.id,
-            status: item.status,
-          },
-          data: {
-            status: PayslipDeliveryStatus.PROCESSING,
-            claimedAt: new Date(),
-            claimedBy: 'delivery-worker',
-          },
-        });
+    // Apply outcome & retry logic per A3.3 table
+    await this.applyOutcome(deliveryId, delivery.dispatchId, outcome);
 
-        if (claimed.count === 0) {
-          // Already grabbed by another worker
-          continue;
-        }
+    // Record circuit breaker & health check
+    if (delivery.dispatchId) {
+      await this.healthService.recordOutcomeAndCheckCircuitBreaker(delivery.dispatchId, outcome);
+      await this.healthService.checkBounceAndComplaintRates(delivery.dispatchId);
+      await this.updateDispatchStatusIfFinished(delivery.dispatchId);
+    }
+  }
 
-        const result = await this.sender.sendDelivery(
-          item.id,
-          PayslipDeliveryAttemptTrigger.AUTOMATIC,
-        );
+  /**
+   * Applies delivery status changes per outcome table (A3.3).
+   */
+  async applyOutcome(
+    deliveryId: string,
+    dispatchId: string | null,
+    outcome: SendOutcome,
+  ): Promise<void> {
+    const delivery = await this.prisma.payslipDelivery.findUnique({
+      where: { id: deliveryId },
+      select: { autoRetryCount: true },
+    });
+    const currentRetries = delivery?.autoRetryCount ?? 0;
 
-        processedCount++;
+    switch (outcome.kind) {
+      case 'ACCEPTED':
+        // Handled inside sender: status = SUBMITTED
+        break;
 
-        // If outcome was failure, schedule retry if under max attempts
-        if (result.outcome !== 'ACCEPTED') {
-          const currentDelivery = await this.prisma.payslipDelivery.findUnique({
-            where: { id: item.id },
-            select: { autoRetryCount: true, status: true },
+      case 'TRANSIENT':
+        if (currentRetries < MAX_AUTO_RETRIES) {
+          const delay = RETRY_BACKOFF_MS[currentRetries] || 15 * 60 * 1000;
+          await this.prisma.payslipDelivery.update({
+            where: { id: deliveryId },
+            data: {
+              status: PayslipDeliveryStatus.RETRY_SCHEDULED,
+              autoRetryCount: { increment: 1 },
+              nextAttemptAt: new Date(Date.now() + delay),
+              claimedAt: null,
+              claimedBy: null,
+            },
           });
-
-          if (
-            currentDelivery &&
-            currentDelivery.status !== PayslipDeliveryStatus.SKIPPED
-          ) {
-            const nextRetryIndex = currentDelivery.autoRetryCount;
-            if (nextRetryIndex < MAX_AUTO_RETRIES) {
-              const delay = RETRY_BACKOFF_MS[nextRetryIndex] || 15 * 60 * 1000;
-              await this.prisma.payslipDelivery.update({
-                where: { id: item.id },
-                data: {
-                  status: PayslipDeliveryStatus.RETRY_SCHEDULED,
-                  autoRetryCount: { increment: 1 },
-                  nextAttemptAt: new Date(Date.now() + delay),
-                },
-              });
-            } else {
-              // Exceeded max retries
-              await this.prisma.payslipDelivery.update({
-                where: { id: item.id },
-                data: {
-                  status: PayslipDeliveryStatus.FAILED,
-                  nextAttemptAt: null,
-                },
-              });
-            }
-          }
+        } else {
+          await this.prisma.payslipDelivery.update({
+            where: { id: deliveryId },
+            data: {
+              status: PayslipDeliveryStatus.FAILED,
+              nextAttemptAt: null,
+              claimedAt: null,
+              claimedBy: null,
+            },
+          });
         }
-      }
+        break;
 
-      // Check if dispatches have completed
-      for (const dId of dispatchIds) {
-        await this.updateDispatchStatusIfFinished(dId);
-      }
+      case 'PERMANENT':
+        await this.prisma.payslipDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: PayslipDeliveryStatus.FAILED,
+            nextAttemptAt: null,
+            claimedAt: null,
+            claimedBy: null,
+          },
+        });
+        break;
 
-      return processedCount;
-    } finally {
-      this.isProcessing = false;
+      case 'SUPPRESSED':
+        await this.prisma.payslipDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: PayslipDeliveryStatus.FAILED,
+            skipReason: 'SUPPRESSED',
+            nextAttemptAt: null,
+            claimedAt: null,
+            claimedBy: null,
+          },
+        });
+        break;
+
+      case 'UNKNOWN':
+        await this.prisma.payslipDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: PayslipDeliveryStatus.SUBMISSION_UNKNOWN,
+            nextAttemptAt: null,
+            claimedAt: null,
+            claimedBy: null,
+          },
+        });
+        break;
+
+      case 'ACCOUNT_PAUSED':
+      case 'CONFIG_ERROR':
+        // Return to PENDING without consuming an attempt, pause the whole dispatch
+        await this.prisma.payslipDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: PayslipDeliveryStatus.PENDING,
+            nextAttemptAt: null,
+            claimedAt: null,
+            claimedBy: null,
+          },
+        });
+        if (dispatchId) {
+          await this.prisma.payslipEmailDispatch.update({
+            where: { id: dispatchId },
+            data: {
+              status: 'PAUSED',
+              pauseReason: outcome.code || outcome.kind,
+            },
+          });
+        }
+        break;
     }
   }
 
@@ -218,6 +360,7 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
       PayslipDeliveryStatus.FAILED,
       PayslipDeliveryStatus.BOUNCED_HARD,
       PayslipDeliveryStatus.REJECTED,
+      PayslipDeliveryStatus.SUBMISSION_UNKNOWN,
     ];
     const hasFailures = counts.some((c) => failureStatuses.includes(c.status));
 
@@ -230,5 +373,12 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
         completedAt: new Date(),
       },
     });
+  }
+
+  /**
+   * For backwards-compatibility with triggers.
+   */
+  async processNextDeliveries(limit = 5): Promise<number> {
+    return this.claimAndProcessBatch(limit);
   }
 }

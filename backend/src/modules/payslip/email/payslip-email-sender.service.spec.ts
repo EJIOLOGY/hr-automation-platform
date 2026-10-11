@@ -2,45 +2,40 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { PayslipPdfReader } from '../pdf/payslip-pdf-reader.interface';
-import { PayslipEmailSenderService } from './payslip-email-sender.service';
-import { PayslipDeliveryAttemptTrigger, PayslipDeliveryStatus, PayslipStatus } from '../../../generated/prisma/client';
+import {
+  PayslipEmailSenderService,
+  escapeHtml,
+  sanitizeHeader,
+} from './payslip-email-sender.service';
 
-describe('PayslipEmailSenderService', () => {
+describe('PayslipEmailSenderService (SESv2)', () => {
   let service: PayslipEmailSenderService;
-  let prisma: any;
-  let pdfReader: any;
 
   beforeEach(async () => {
-    prisma = {
-      payslipDelivery: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
-      },
-      payslipDeliveryAttempt: {
-        create: jest.fn().mockResolvedValue({ id: 'attempt-1' }),
-        update: jest.fn(),
-      },
-      emailSuppression: {
-        findFirst: jest.fn().mockResolvedValue(null),
-      },
-    };
-
-    pdfReader = {
-      getReady: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PayslipEmailSenderService,
-        { provide: PrismaService, useValue: prisma },
-        { provide: PayslipPdfReader, useValue: pdfReader },
+        {
+          provide: PrismaService,
+          useValue: {
+            payslipDelivery: { findUnique: jest.fn(), update: jest.fn() },
+            payslipDeliveryAttempt: { create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+            emailSuppression: { findFirst: jest.fn() },
+            payslipEmailDispatch: { update: jest.fn() },
+          },
+        },
+        {
+          provide: PayslipPdfReader,
+          useValue: { getReady: jest.fn() },
+        },
         {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string) => {
-              if (key === 'AWS_REGION') return 'us-east-1';
+              if (key === 'AWS_REGION') return 'eu-west-1';
               if (key === 'AWS_ACCESS_KEY_ID') return 'mock-key';
               if (key === 'AWS_SECRET_ACCESS_KEY') return 'mock-secret';
+              if (key === 'PAYSLIP_FROM_EMAIL') return 'payslips@intertechsystemslimited.com';
               return null;
             }),
           },
@@ -51,50 +46,80 @@ describe('PayslipEmailSenderService', () => {
     service = module.get<PayslipEmailSenderService>(PayslipEmailSenderService);
   });
 
-  it('builds raw MIME email containing headers and PDF attachment', () => {
-    const raw = service.buildRawEmail({
-      from: 'hr@example.com',
-      to: 'emp@example.com',
-      subject: 'Test Payslip',
-      bodyText: 'Hello world',
-      bodyHtml: '<p>Hello world</p>',
-      pdfBuffer: Buffer.from('%PDF-1.4 mock'),
-      pdfFilename: 'test.pdf',
+  describe('HTML escaping and header sanitization', () => {
+    it('escapes dangerous HTML characters', () => {
+      const input = '<script>alert(1)</script> & "Co"';
+      expect(escapeHtml(input)).toBe('&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;Co&quot;');
     });
 
-    const emailStr = raw.toString();
-    expect(emailStr).toContain('From: hr@example.com');
-    expect(emailStr).toContain('To: emp@example.com');
-    expect(emailStr).toContain('Content-Type: multipart/mixed;');
-    expect(emailStr).toContain('Content-Type: application/pdf; name="test.pdf"');
+    it('strips newlines and carriage returns from headers to prevent header injection', () => {
+      const input = 'Subject: Test\r\nBcc: hacker@example.com\nAnother';
+      expect(sanitizeHeader(input)).toBe('Subject: Test Bcc: hacker@example.com Another');
+    });
   });
 
-  it('fails with SUPPRESSED_ADDRESS if recipient is in active suppression list', async () => {
-    prisma.payslipDelivery.update.mockResolvedValue({ attemptCount: 1 });
-    prisma.payslipDelivery.findUnique.mockResolvedValue({
-      id: 'del-1',
-      payslipId: 'slip-1',
-      recipientEmailSnapshot: 'suppressed@example.com',
-      payslip: {
-        status: PayslipStatus.APPROVED,
-        payslipBatch: {
-          payrollPeriod: { name: 'Jan 2026' },
-          accountingCompany: { name: 'Acme' },
-        },
+  describe('Error classification table', () => {
+    const testCases = [
+      { err: { name: 'TooManyRequestsException' }, expectedKind: 'TRANSIENT' },
+      { err: { name: 'ThrottlingException' }, expectedKind: 'TRANSIENT' },
+      { err: { name: 'LimitExceededException' }, expectedKind: 'TRANSIENT' },
+      { err: { name: 'SomeError', $metadata: { httpStatusCode: 429 } }, expectedKind: 'TRANSIENT' },
+      { err: { name: 'SomeError', $metadata: { httpStatusCode: 503 } }, expectedKind: 'TRANSIENT' },
+      {
+        err: { name: 'MessageRejected', message: 'Email address is not verified. The following identities failed' },
+        expectedKind: 'PERMANENT',
+        expectedCode: 'SANDBOX_RECIPIENT_NOT_VERIFIED',
       },
-      employee: {
-        email: 'suppressed@example.com',
-        fullName: 'Jane Doe',
-      },
-    });
+      { err: { name: 'MessageRejected', message: 'Other rejection' }, expectedKind: 'PERMANENT' },
+      { err: { name: 'BadRequestException' }, expectedKind: 'PERMANENT' },
+      { err: { name: 'InvalidParameterValue' }, expectedKind: 'PERMANENT' },
+      { err: { name: 'MailFromDomainNotVerifiedException' }, expectedKind: 'CONFIG_ERROR' },
+      { err: { name: 'NotFoundException' }, expectedKind: 'CONFIG_ERROR' },
+      { err: { name: 'CredentialsProviderError' }, expectedKind: 'CONFIG_ERROR' },
+      { err: { name: 'UnrecognizedClientException' }, expectedKind: 'CONFIG_ERROR' },
+      { err: { name: 'InvalidSignatureException' }, expectedKind: 'CONFIG_ERROR' },
+      { err: { name: 'AccessDeniedException' }, expectedKind: 'CONFIG_ERROR' },
+      { err: { name: 'AccountSuspendedException' }, expectedKind: 'ACCOUNT_PAUSED' },
+      { err: { name: 'SendingPausedException' }, expectedKind: 'ACCOUNT_PAUSED' },
+      { err: { name: 'TimeoutError', message: 'Socket timeout' }, expectedKind: 'UNKNOWN' },
+      { err: { name: 'Error', message: 'read ECONNRESET' }, expectedKind: 'UNKNOWN' },
+      { err: { name: 'Error', message: 'write EPIPE' }, expectedKind: 'UNKNOWN' },
+      { err: { name: 'Error', message: 'socket hang up' }, expectedKind: 'UNKNOWN' },
+      { err: { name: 'UnknownCustomError' }, expectedKind: 'UNKNOWN' },
+    ];
 
-    prisma.emailSuppression.findFirst.mockResolvedValue({
-      id: 'sup-1',
-      reason: 'HARD_BOUNCE',
+    testCases.forEach(({ err, expectedKind, expectedCode }) => {
+      it(`classifies ${err.name || 'Error'} as ${expectedKind}`, () => {
+        const res = service.classifySesError(err);
+        expect(res.kind).toBe(expectedKind);
+        if (expectedCode && res.kind !== 'ACCEPTED') {
+          expect(res.code).toBe(expectedCode);
+        }
+      });
     });
+  });
 
-    const result = await service.sendDelivery('del-1', PayslipDeliveryAttemptTrigger.AUTOMATIC);
-    expect(result.outcome).toBe('CONFIRMED_FAILURE');
-    expect(result.errorCode).toBe('SUPPRESSED_ADDRESS');
+  describe('Configuration guard', () => {
+    it('returns CONFIG_ERROR if PAYSLIP_FROM_EMAIL is unset', async () => {
+      delete process.env.PAYSLIP_FROM_EMAIL;
+      const mod = await Test.createTestingModule({
+        providers: [
+          PayslipEmailSenderService,
+          { provide: PrismaService, useValue: {} },
+          { provide: PayslipPdfReader, useValue: {} },
+          {
+            provide: ConfigService,
+            useValue: { get: () => null },
+          },
+        ],
+      }).compile();
+
+      const sender = mod.get<PayslipEmailSenderService>(PayslipEmailSenderService);
+      const res = await sender.sendDelivery('del-1');
+      expect(res.kind).toBe('CONFIG_ERROR');
+      if (res.kind !== 'ACCEPTED') {
+        expect(res.code).toBe('PAYSLIP_FROM_EMAIL_NOT_CONFIGURED');
+      }
+    });
   });
 });

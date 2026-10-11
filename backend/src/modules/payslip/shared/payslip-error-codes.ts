@@ -44,7 +44,9 @@ export type PayslipErrorCode =
   | 'SUPPRESSION_NOT_RESOLVABLE'
   | 'INVALID_SNS_SIGNATURE'
   | 'TEST_MODE_LIMIT_EXCEEDED'
-  | 'INVALID_EMAIL';
+  | 'INVALID_EMAIL'
+  | 'SES_SANDBOX_RESTRICTED'
+  | 'CONFIG_ERROR';
 
 export interface PayslipErrorPayload {
   statusCode: number;

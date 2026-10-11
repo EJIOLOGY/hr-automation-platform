@@ -32,7 +32,14 @@ import {
 } from './pdf/payslip-pdf-reader.interface';
 import { PayslipEmailSenderService } from './email/payslip-email-sender.service';
 import { PayslipDeliveryWorkerService } from './email/payslip-delivery-worker.service';
+import { DispatchHealthService } from './email/dispatch-health.service';
 import { PayslipEmailDispatchController } from './email/payslip-email-dispatch.controller';
+import { SesWebhookController } from './email/ses-webhook.controller';
+import { EmailSuppressionController } from './email/email-suppression.controller';
+import { PayslipDeliveryReconciliationController } from './email/payslip-delivery-reconciliation.controller';
+import { SesStatusController } from './email/ses-status.controller';
+import { SesEventMapperService } from './email/ses-event-mapper.service';
+import { PayslipRetentionSweepService } from './email/payslip-retention-sweep.service';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -45,6 +52,10 @@ import { PayslipEmailDispatchController } from './email/payslip-email-dispatch.c
     PayslipCatalogController,
     PayRunController,
     PayslipEmailDispatchController,
+    SesWebhookController,
+    EmailSuppressionController,
+    PayslipDeliveryReconciliationController,
+    SesStatusController,
   ],
   providers: [
     PayslipCalculationService,
@@ -55,6 +66,9 @@ import { PayslipEmailDispatchController } from './email/payslip-email-dispatch.c
     PayslipPdfBundleService,
     PayslipEmailSenderService,
     PayslipDeliveryWorkerService,
+    DispatchHealthService,
+    SesEventMapperService,
+    PayslipRetentionSweepService,
     {
       provide: PayslipPdfReader,
       useExisting: PdfGenerationService,
@@ -99,6 +113,7 @@ import { PayslipEmailDispatchController } from './email/payslip-email-dispatch.c
     PayslipPdfBundleService,
     PayslipEmailSenderService,
     PayslipDeliveryWorkerService,
+    DispatchHealthService,
   ],
 })
 export class PayslipModule {}
