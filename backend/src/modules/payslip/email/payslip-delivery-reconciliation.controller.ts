@@ -40,10 +40,13 @@ export class PayslipDeliveryReconciliationController {
   ) {}
 
   /**
-   * Periodic reconciliation logic for SUBMISSION_UNKNOWN older than 15 mins
-   * and unprocessed SesNotificationEvent records.
+   * POST /payslip/admin/reconcile
+   * Admin-only: processes pending SES notification events and reports stale SUBMISSION_UNKNOWN deliveries.
    */
-  async runReconciliationJob(): Promise<{ reconciledCount: number; processedEvents: number }> {
+  @Post('admin/reconcile')
+  @Roles(HrOfficerRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async triggerReconciliation(): Promise<{ reconciledCount: number; processedEvents: number }> {
     // 1. Process any SesNotificationEvent with processedAt IS NULL
     const pendingEvents = await this.prisma.sesNotificationEvent.findMany({
       where: { processedAt: null },
@@ -61,6 +64,7 @@ export class PayslipDeliveryReconciliationController {
         updatedAt: { lt: fifteenMinsAgo },
       },
       take: 50,
+      select: { id: true, employeeId: true, updatedAt: true, dispatchId: true },
     });
 
     return {

@@ -40,6 +40,7 @@ import { PayslipDeliveryReconciliationController } from './email/payslip-deliver
 import { SesStatusController } from './email/ses-status.controller';
 import { SesEventMapperService } from './email/ses-event-mapper.service';
 import { PayslipRetentionSweepService } from './email/payslip-retention-sweep.service';
+import { PayslipAdminController } from './email/payslip-admin.controller';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -56,6 +57,7 @@ import { PayslipRetentionSweepService } from './email/payslip-retention-sweep.se
     EmailSuppressionController,
     PayslipDeliveryReconciliationController,
     SesStatusController,
+    PayslipAdminController,
   ],
   providers: [
     PayslipCalculationService,
