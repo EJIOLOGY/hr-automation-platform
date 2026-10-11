@@ -103,4 +103,73 @@ describe('SesWebhookController & Event Mapping', () => {
       expect(res).toEqual({ status: 'DuplicateEventIgnored' });
     });
   });
+  describe('SNS body handling (text/plain)', () => {
+    it('parses a JSON string body, as delivered by SNS with Content-Type text/plain', () => {
+      const msg = { Type: 'Notification', MessageId: 'm-1', Message: '{}' };
+      const parsed = controller.parseSnsBody({ body: JSON.stringify(msg) } as any);
+      expect(parsed.MessageId).toBe('m-1');
+    });
+
+    it('parses a Buffer body and falls back to rawBody when body is empty', () => {
+      const msg = { Type: 'Notification', MessageId: 'm-2' };
+      expect(controller.parseSnsBody({ body: Buffer.from(JSON.stringify(msg)) } as any).MessageId).toBe('m-2');
+      expect(
+        controller.parseSnsBody({ body: {}, rawBody: Buffer.from(JSON.stringify(msg)) } as any).MessageId,
+      ).toBe('m-2');
+    });
+
+    it('rejects an empty or malformed body with 400', () => {
+      expect(() => controller.parseSnsBody({ body: {} } as any)).toThrow(BadRequestException);
+      expect(() => controller.parseSnsBody({ body: '{not json' } as any)).toThrow(BadRequestException);
+    });
+
+    it('handles a full text/plain notification end to end and stores no recipient addresses', async () => {
+      jest.spyOn(controller, 'validateSnsMessage').mockResolvedValue(undefined);
+      prisma.sesNotificationEvent.create.mockResolvedValue({ id: 'evt-1' });
+
+      const sesEvent = {
+        eventType: 'Bounce',
+        mail: {
+          messageId: 'ses-9',
+          timestamp: '2026-10-11T10:00:00.000Z',
+          destination: ['jane.doe@example.invalid'],
+          tags: { deliveryId: ['d-1'], other: ['x'] },
+        },
+        bounce: {
+          bounceType: 'Permanent',
+          bounceSubType: 'General',
+          bouncedRecipients: [{ emailAddress: 'jane.doe@example.invalid' }],
+        },
+      };
+      const body = JSON.stringify({ Type: 'Notification', MessageId: 'sns-9', Message: JSON.stringify(sesEvent) });
+
+      const res = await controller.handleSesEvent({ body } as any);
+
+      expect(res).toEqual({ status: 'EventReceived', id: 'evt-1' });
+      const stored = prisma.sesNotificationEvent.create.mock.calls[0][0].data.minimalPayload;
+      expect(JSON.stringify(stored)).not.toContain('jane.doe');
+      expect(stored.bounce.bounceType).toBe('Permanent');
+      expect(stored.mail.tags).toEqual({ deliveryId: ['d-1'] });
+    });
+  });
+
+  describe('Topic configuration', () => {
+    it('fails closed when SES_SNS_TOPIC_ARN is not configured', async () => {
+      const configService = (controller as any).configService;
+      configService.get.mockReturnValue(undefined);
+      const saved = process.env.SES_SNS_TOPIC_ARN;
+      delete process.env.SES_SNS_TOPIC_ARN;
+      try {
+        await expect(
+          controller.validateSnsMessage({
+            TopicArn: 'arn:aws:sns:eu-west-1:123456789012:any',
+            SigningCertURL: 'https://sns.eu-west-1.amazonaws.com/cert.pem',
+            Timestamp: new Date().toISOString(),
+          }),
+        ).rejects.toThrow(ForbiddenException);
+      } finally {
+        if (saved !== undefined) process.env.SES_SNS_TOPIC_ARN = saved;
+      }
+    });
+  });
 });

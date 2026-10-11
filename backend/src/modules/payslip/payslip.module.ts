@@ -41,6 +41,8 @@ import { SesStatusController } from './email/ses-status.controller';
 import { SesEventMapperService } from './email/ses-event-mapper.service';
 import { PayslipRetentionSweepService } from './email/payslip-retention-sweep.service';
 import { PayslipAdminController } from './email/payslip-admin.controller';
+import { PayslipReadController } from './read/payslip-read.controller';
+import { PayslipSchedulerService } from './email/payslip-scheduler.service';
 
 @Module({
   imports: [BillingRateModule, PrismaModule, AuditModule, PdfModule],
@@ -58,6 +60,7 @@ import { PayslipAdminController } from './email/payslip-admin.controller';
     PayslipDeliveryReconciliationController,
     SesStatusController,
     PayslipAdminController,
+    PayslipReadController,
   ],
   providers: [
     PayslipCalculationService,
@@ -71,6 +74,7 @@ import { PayslipAdminController } from './email/payslip-admin.controller';
     DispatchHealthService,
     SesEventMapperService,
     PayslipRetentionSweepService,
+    PayslipSchedulerService,
     {
       provide: PayslipPdfReader,
       useExisting: PdfGenerationService,

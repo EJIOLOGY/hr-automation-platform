@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import * as ExcelJS from 'exceljs';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { runPayslipTransaction } from '../shared/payslip-transaction';
 import { AuditService } from '../../audit/audit.service';
 import { PayslipBatchStatus, PayslipStatus, Prisma } from '../../../generated/prisma/client';
 import { calculatePayslip, CANONICAL_ALLOWANCES } from '../calculation/calculation-engine';
@@ -336,7 +337,7 @@ export class ReviewWorkbookService {
       }
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await runPayslipTransaction(this.prisma, 'BULK', async (tx) => {
       for (const update of mutableUpdates) {
         const payslip = await tx.payslip.findUnique({ where: { payslipBatchId_staffId: { payslipBatchId: batchId, staffId: update.staffId } } });
         if (!payslip) throw new BadRequestException(`Unknown StaffID ${update.staffId} in review workbook.`);

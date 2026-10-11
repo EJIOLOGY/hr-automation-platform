@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { runPayslipTransaction } from '../shared/payslip-transaction';
 import { AuditService } from '../../audit/audit.service';
 import { BillingRateUploadStatus } from '../../../generated/prisma/enums';
 import { Prisma } from '../../../generated/prisma/client';
@@ -66,7 +67,7 @@ export class BillingRateService {
         ? BillingRateUploadStatus.REJECTED
         : BillingRateUploadStatus.VALIDATED;
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await runPayslipTransaction(this.prisma, 'BULK', async (tx) => {
       const latest = await tx.billingRateUpload.findFirst({
         where: { accountingCompanyId, payrollPeriodId },
         orderBy: { version: 'desc' },

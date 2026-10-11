@@ -84,3 +84,9 @@ Submit an SES production access request with the following template:
 | `PAYSLIP_WORKER_IDLE_MS` | `5000` | Idle sleep interval when no deliveries are claimable |
 | `PAYSLIP_PDF_PIN_DAYS` | `3` | Minimum retention days pinned upon dispatch release |
 | `PAYSLIP_RETENTION_DAYS` | `20` | Stored PDF and delivery record retention window |
+| `PAYSLIP_SCHEDULER_ENABLED` | `true` | Set `false` on instances that must not run the reconcile / retention jobs |
+| `PAYSLIP_RECONCILE_INTERVAL_MINUTES` | `15` | How often stored-but-unprocessed SES events are applied |
+| `PAYSLIP_RETENTION_SWEEP_INTERVAL_HOURS` | `24` | How often the retention sweep runs |
+| `PAYSLIP_RETENTION_SWEEP_START_DELAY_MINUTES` | `10` | Delay before the first sweep after the app starts |
+
+> **Webhook notes.** SNS posts `Content-Type: text/plain`; `main.ts` registers a text body parser for it. `SES_SNS_TOPIC_ARN` is **required**: with it unset the webhook rejects every message (fail closed). The app must be reachable over public HTTPS for SNS to deliver and for the subscription to confirm.

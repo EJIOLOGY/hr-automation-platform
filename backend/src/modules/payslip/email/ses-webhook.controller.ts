@@ -13,6 +13,7 @@ import type { Request } from 'express';
 import MessageValidator from 'sns-validator';
 import https from 'https';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import type { Prisma } from '../../../generated/prisma/client';
 import { SesEventMapperService } from './ses-event-mapper.service';
 
 @Controller('webhooks')
@@ -33,7 +34,12 @@ export class SesWebhookController {
     const expectedTopicArn =
       this.configService.get<string>('SES_SNS_TOPIC_ARN') || process.env.SES_SNS_TOPIC_ARN;
 
-    if (expectedTopicArn && rawMessage.TopicArn && rawMessage.TopicArn !== expectedTopicArn) {
+    if (!expectedTopicArn) {
+      // Fail closed: without a configured topic we cannot tell our SNS topic from anyone else's.
+      this.logger.error('SES_SNS_TOPIC_ARN is not configured; rejecting SNS message.');
+      throw new ForbiddenException('SES_SNS_TOPIC_ARN is not configured');
+    }
+    if (rawMessage.TopicArn !== expectedTopicArn) {
       throw new ForbiddenException('TopicArn mismatch');
     }
 
@@ -76,27 +82,82 @@ export class SesWebhookController {
   }
 
   /**
+   * SNS posts JSON text with Content-Type text/plain (parsed to a string by the text body parser
+   * registered in main.ts). JSON bodies and raw Buffers are also accepted for tests and proxies.
+   */
+  parseSnsBody(req: Request & { rawBody?: Buffer }): any {
+    const body: unknown = req.body;
+    try {
+      if (typeof body === 'string' && body.trim().length > 0) {
+        return JSON.parse(body);
+      }
+      if (Buffer.isBuffer(body)) {
+        return JSON.parse(body.toString('utf-8'));
+      }
+      if (body && typeof body === 'object' && Object.keys(body as object).length > 0) {
+        return body;
+      }
+      if (req.rawBody && Buffer.isBuffer(req.rawBody) && req.rawBody.length > 0) {
+        return JSON.parse(req.rawBody.toString('utf-8'));
+      }
+    } catch {
+      throw new BadRequestException('Invalid JSON payload');
+    }
+    throw new BadRequestException('Empty SNS payload');
+  }
+
+  /**
+   * Keeps only what the event mapper needs. Recipient addresses (mail.destination,
+   * bounce.bouncedRecipients, complaint.complainedRecipients, ...) are deliberately dropped so
+   * full email addresses are never persisted in the event log.
+   */
+  buildMinimalPayload(event: any): Record<string, unknown> {
+    const tags = event?.mail?.tags ?? {};
+    const safeTags: Record<string, unknown> = {};
+    for (const key of ['deliveryId', 'dispatchId']) {
+      if (tags[key] !== undefined) safeTags[key] = tags[key];
+    }
+    return {
+      eventType: event?.eventType ?? event?.notificationType ?? 'Unknown',
+      mail: {
+        messageId: event?.mail?.messageId,
+        timestamp: event?.mail?.timestamp,
+        tags: safeTags,
+      },
+      ...(event?.bounce
+        ? {
+            bounce: {
+              bounceType: event.bounce.bounceType,
+              bounceSubType: event.bounce.bounceSubType,
+              timestamp: event.bounce.timestamp,
+            },
+          }
+        : {}),
+      ...(event?.complaint
+        ? {
+            complaint: {
+              complaintFeedbackType: event.complaint.complaintFeedbackType,
+              timestamp: event.complaint.timestamp,
+            },
+          }
+        : {}),
+      ...(event?.delivery ? { delivery: { timestamp: event.delivery.timestamp } } : {}),
+      ...(event?.deliveryDelay
+        ? { deliveryDelay: { delayType: event.deliveryDelay.delayType, timestamp: event.deliveryDelay.timestamp } }
+        : {}),
+      ...(event?.reject ? { reject: { reason: event.reject.reason } } : {}),
+      ...(event?.failure ? { failure: { errorMessage: event.failure.errorMessage } } : {}),
+    };
+  }
+
+  /**
    * POST /webhooks/ses-events
    * Unauthenticated endpoint receiving SNS notifications for SES events.
    */
   @Post('ses-events')
   @HttpCode(HttpStatus.OK)
   async handleSesEvent(@Req() req: Request & { rawBody?: Buffer }) {
-    let rawBodyStr = '';
-    if (req.rawBody && Buffer.isBuffer(req.rawBody)) {
-      rawBodyStr = req.rawBody.toString('utf-8');
-    } else if (typeof req.body === 'string') {
-      rawBodyStr = req.body;
-    } else if (req.body && typeof req.body === 'object') {
-      rawBodyStr = JSON.stringify(req.body);
-    }
-
-    let parsedMessage: any;
-    try {
-      parsedMessage = typeof req.body === 'object' && req.body !== null ? req.body : JSON.parse(rawBodyStr);
-    } catch {
-      throw new BadRequestException('Invalid JSON payload');
-    }
+    const parsedMessage = this.parseSnsBody(req);
 
     await this.validateSnsMessage(parsedMessage);
 
@@ -119,8 +180,9 @@ export class SesWebhookController {
 
       this.logger.log(`Confirming SNS subscription via ${subscribeUrl}`);
       await new Promise<void>((resolve, reject) => {
-        https
+        const request = https
           .get(subscribeUrl, (res) => {
+            res.resume();
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               resolve();
             } else {
@@ -128,6 +190,7 @@ export class SesWebhookController {
             }
           })
           .on('error', reject);
+        request.setTimeout(10000, () => request.destroy(new Error('Subscription confirmation timed out')));
       });
 
       return { status: 'SubscriptionConfirmed' };
@@ -165,7 +228,7 @@ export class SesWebhookController {
             eventType,
             sesMessageId,
             eventTimestamp,
-            minimalPayload: innerEvent,
+            minimalPayload: this.buildMinimalPayload(innerEvent) as Prisma.InputJsonValue,
           },
         });
       } catch (err: any) {

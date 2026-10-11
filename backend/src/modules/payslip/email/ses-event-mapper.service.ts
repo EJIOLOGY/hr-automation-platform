@@ -38,6 +38,35 @@ export class SesEventMapperService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Processes stored events that were received but not yet applied (e.g. the process crashed after the
+   * webhook stored the event). Used by the scheduler and the admin reconcile endpoint.
+   */
+  async processPendingEvents(limit = 100): Promise<number> {
+    const pending = await this.prisma.sesNotificationEvent.findMany({
+      where: { processedAt: null },
+      orderBy: { receivedAt: 'asc' },
+      select: { id: true },
+      take: limit,
+    });
+    let processed = 0;
+    for (const evt of pending) {
+      try {
+        await this.processEvent(evt.id);
+        processed++;
+      } catch (err: any) {
+        this.logger.error(`Failed to process SES event ${evt.id}: ${err?.message || err}`);
+        await this.prisma.sesNotificationEvent
+          .update({
+            where: { id: evt.id },
+            data: { processingError: String(err?.message || err).slice(0, 500) },
+          })
+          .catch(() => undefined);
+      }
+    }
+    return processed;
+  }
+
+  /**
    * Applies an SES notification event to PayslipDelivery and EmailSuppression.
    */
   async processEvent(sesNotificationEventId: string): Promise<void> {

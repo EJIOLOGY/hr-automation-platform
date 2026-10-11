@@ -18,6 +18,12 @@
 | `POST /api/v1/payslip/email-suppressions/:id/resolve` | Admin | Resolve suppression with note | 400, 404 |
 | `POST /api/v1/payslip/deliveries/:id/resolve-unknown` | Admin | Reconcile uncertain send | 400, 404 |
 | `GET /api/v1/payslip/ses-status` | Admin, Officer | Live/cached SES quota & identity status | - |
+| `POST /api/v1/payslip/admin/reconcile` | Admin | Apply stored SES events now; count stale uncertain sends | - |
+| `POST /api/v1/payslip/admin/retention-sweep` | Admin | Run the retention sweep now (also runs daily) | - |
+| `GET /api/v1/payslip/settings` | Admin, Officer | Review settings (variance threshold %) | - |
+| `PUT /api/v1/payslip/settings` | Admin | Update variance threshold (whole number 1-100); audited | 400 |
+| `GET /api/v1/payslip/batches/:id/activity?limit&cursor` | Admin, Officer | Audit trail for a batch and its dispatches (no pay figures) | 404 |
+| `GET /api/v1/payslip/payslips/:id` | Admin, Officer | One payslip with review, PDF and email delivery state | 404 |
 
 ---
 

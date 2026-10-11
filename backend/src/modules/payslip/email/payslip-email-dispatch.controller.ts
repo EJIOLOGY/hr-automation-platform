@@ -23,6 +23,7 @@ import { PayslipAuthorizationService } from '../payslip-authorization.service';
 import { PayslipEmailSenderService } from './payslip-email-sender.service';
 import { PayslipDeliveryWorkerService } from './payslip-delivery-worker.service';
 import { PayslipPdfRetentionPin } from '../pdf/payslip-pdf-reader.interface';
+import { runPayslipTransaction } from '../shared/payslip-transaction';
 import { payslipError } from '../shared/payslip-error-codes';
 import {
   EmailSuppressionStatus,
@@ -231,7 +232,7 @@ export class PayslipEmailDispatchController {
       });
     }
 
-    const dispatch = await this.prisma.$transaction(async (tx) => {
+    const dispatch = await runPayslipTransaction(this.prisma, 'BULK', async (tx) => {
       const createdDispatch = await tx.payslipEmailDispatch.create({
         data: {
           payslipBatchId: batchId,
@@ -321,13 +322,27 @@ export class PayslipEmailDispatchController {
       let verifiedCount = 0;
       let unverifiedCount = 0;
 
+      // Look each distinct address up once, a few at a time (cached 10 min in the sender).
+      const distinctEmails = [
+        ...new Set(
+          pendingDeliveries
+            .map((d) => d.recipientEmailSnapshot)
+            .filter((e): e is string => Boolean(e)),
+        ),
+      ];
+      const verifiedEmails = new Set<string>();
+      for (let i = 0; i < distinctEmails.length; i += 10) {
+        const slice = distinctEmails.slice(i, i + 10);
+        const results = await Promise.all(
+          slice.map(async (e) => ({
+            e,
+            ok: await this.sender.isRecipientVerifiedInSandbox(e),
+          })),
+        );
+        for (const r of results) if (r.ok) verifiedEmails.add(r.e);
+      }
       for (const d of pendingDeliveries) {
-        if (!d.recipientEmailSnapshot) {
-          unverifiedCount++;
-          continue;
-        }
-        const isVerified = await this.sender.isRecipientVerifiedInSandbox(d.recipientEmailSnapshot);
-        if (isVerified) {
+        if (d.recipientEmailSnapshot && verifiedEmails.has(d.recipientEmailSnapshot)) {
           verifiedCount++;
         } else {
           unverifiedCount++;
@@ -501,7 +516,7 @@ export class PayslipEmailDispatchController {
       throw new BadRequestException(`Cannot cancel an already finished dispatch.`);
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await runPayslipTransaction(this.prisma, 'BULK', async (tx) => {
       const d = await tx.payslipEmailDispatch.update({
         where: { id: dispatchId },
         data: {
@@ -608,6 +623,8 @@ export class PayslipEmailDispatchController {
       where: {
         dispatchId,
         status: PayslipDeliveryStatus.FAILED,
+        // Suppressed recipients are never retried automatically or in bulk (resolve the suppression first).
+        OR: [{ skipReason: null }, { skipReason: { not: 'SUPPRESSED' } }],
       },
       data: {
         status: PayslipDeliveryStatus.PENDING,

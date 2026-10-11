@@ -24,6 +24,7 @@ import {
   PayslipDeliveryStatus,
 } from '../../../generated/prisma/client';
 import { SesEventMapperService } from './ses-event-mapper.service';
+import { runPayslipTransaction } from '../shared/payslip-transaction';
 
 export class ResolveUnknownDto {
   resolution!: 'RESEND' | 'MARK_DELIVERED_MANUALLY' | 'MARK_FAILED';
@@ -48,13 +49,7 @@ export class PayslipDeliveryReconciliationController {
   @HttpCode(HttpStatus.OK)
   async triggerReconciliation(): Promise<{ reconciledCount: number; processedEvents: number }> {
     // 1. Process any SesNotificationEvent with processedAt IS NULL
-    const pendingEvents = await this.prisma.sesNotificationEvent.findMany({
-      where: { processedAt: null },
-      take: 50,
-    });
-    for (const evt of pendingEvents) {
-      await this.mapper.processEvent(evt.id);
-    }
+    const processedEvents = await this.mapper.processPendingEvents(100);
 
     // 2. Count unresolved SUBMISSION_UNKNOWN older than 15 mins
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
@@ -69,7 +64,7 @@ export class PayslipDeliveryReconciliationController {
 
     return {
       reconciledCount: unknownDeliveries.length,
-      processedEvents: pendingEvents.length,
+      processedEvents,
     };
   }
 
@@ -149,7 +144,7 @@ export class PayslipDeliveryReconciliationController {
 
     if (dto.resolution === 'RESEND') {
       // Create new delivery, mark old one as FAILED / superseded
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await runPayslipTransaction(this.prisma, 'ROW', async (tx) => {
         await tx.payslipDelivery.update({
           where: { id },
           data: {
@@ -175,6 +170,18 @@ export class PayslipDeliveryReconciliationController {
             contentHash: delivery.contentHash,
           },
         });
+
+        // The dispatch may already be finished; the worker only claims deliveries of APPROVED/SENDING
+        // dispatches, so re-open it or the replacement delivery would never be sent.
+        if (delivery.dispatchId) {
+          await tx.payslipEmailDispatch.updateMany({
+            where: {
+              id: delivery.dispatchId,
+              status: { in: ['COMPLETED', 'COMPLETED_WITH_FAILURES'] },
+            },
+            data: { status: 'SENDING', completedAt: null },
+          });
+        }
 
         return newDelivery;
       });

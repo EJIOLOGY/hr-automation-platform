@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
+import { runPayslipTransaction } from '../shared/payslip-transaction';
 import { AuditService } from '../../audit/audit.service';
 import {
   PayslipBatchStatus,
@@ -76,7 +77,7 @@ export class PayslipCalculationService {
       };
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return runPayslipTransaction(this.prisma, 'CALC', async (tx) => {
       // Find latest batch version for this company and period
       const latestBatch = await tx.payslipBatch.findFirst({
         where: {

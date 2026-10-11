@@ -30,6 +30,7 @@ export class PayslipAdminController {
   async triggerRetentionSweep(): Promise<{
     deletedPdfs: number;
     deletedDeliveries: number;
+    deletedBlobs: number;
     deletedAttempts: number;
     deletedEvents: number;
   }> {
