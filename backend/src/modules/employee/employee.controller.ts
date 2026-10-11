@@ -12,13 +12,15 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { CurrentUser, AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  type AuthenticatedUser,
+} from '../auth/decorators/current-user.decorator';
 import { isEmailValid, maskEmail, normalizeEmail } from './email-utils';
 
 export class PatchEmployeeEmailDto {
   email!: string;
 }
-
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard)
@@ -66,7 +68,9 @@ export class EmployeeController {
         action: 'EMPLOYEE_EMAIL_CLEARED',
         entityType: 'EMPLOYEE',
         entityId: employeeId,
-        metadata: { previousMasked: employee.email ? maskEmail(employee.email) : null },
+        metadata: {
+          previousMasked: employee.email ? maskEmail(employee.email) : null,
+        },
       });
 
       return { employeeId, emailMasked: null };

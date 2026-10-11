@@ -8,7 +8,7 @@ import { PayslipDashboardService } from '../dashboard/payslip-dashboard.service'
 
 describe('ReviewWorkbookService', () => {
   let service: ReviewWorkbookService;
-  let prisma: jest.Mocked<PrismaService>;
+  let prisma: any;
   let audit: jest.Mocked<AuditService>;
 
   beforeEach(async () => {
@@ -42,7 +42,10 @@ describe('ReviewWorkbookService', () => {
             log: jest.fn(),
           },
         },
-        { provide: PayslipDashboardService, useValue: { correctSinglePayslip: jest.fn() } },
+        {
+          provide: PayslipDashboardService,
+          useValue: { correctSinglePayslip: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -59,19 +62,33 @@ describe('ReviewWorkbookService', () => {
           {
             id: 'payslip-1',
             staffId: 'EMP001',
-            employee: { fullName: 'John Doe', jobTitle: 'Dev', department: 'IT' },
-            calculationOutputs: { consultantGrossPay: 1000, grossEarnings: 1000, wht: 100, netServiceFee: 900 },
+            employee: {
+              fullName: 'John Doe',
+              jobTitle: 'Dev',
+              department: 'IT',
+            },
+            calculationOutputs: {
+              consultantGrossPay: 1000,
+              grossEarnings: 1000,
+              wht: 100,
+              netServiceFee: 900,
+            },
             calculationInputs: { daysWorked: 20, totalDays: 20 },
             lines: [],
           },
         ],
       } as any);
 
-      const result = await service.exportReviewWorkbook('batch-1', { actorType: 'HR', actorHrOfficerId: 'hr-1' });
+      const result = await service.exportReviewWorkbook('batch-1', {
+        actorType: 'HR',
+        actorHrOfficerId: 'hr-1',
+      });
       expect(Buffer.isBuffer(result)).toBeTruthy();
       expect(result.length).toBeGreaterThan(0);
       expect(prisma.reviewWorkbook.create).toHaveBeenCalled();
-      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'PAYSLIP_REVIEW_WORKBOOK_EXPORTED' }));
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYSLIP_REVIEW_WORKBOOK_EXPORTED' }),
+      );
     });
   });
 
@@ -79,24 +96,68 @@ describe('ReviewWorkbookService', () => {
     it('should import a workbook and return correct counts', async () => {
       prisma.reviewWorkbook.findFirst.mockResolvedValue({ id: 'rw-1' } as any);
       prisma.payslip.findUnique.mockResolvedValue({
-        id: 'p1', status: 'CALCULATED', calculationInputs: { daysWorked: 20, totalDays: 20, baseFee: 1000, otherDeduction: 0 },
+        id: 'p1',
+        status: 'CALCULATED',
+        calculationInputs: {
+          daysWorked: 20,
+          totalDays: 20,
+          baseFee: 1000,
+          otherDeduction: 0,
+        },
       } as any);
 
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Payslips');
-      ws.addRow(['StaffID', '...', '...', '...', 'DaysWorked', 'TotalDays', 'DaysAbsent', 'BaseFee', 'OtherDeduction', '...', '...', '...', '...', 'ReviewNotes', 'HRDecision']);
-      ws.addRow(['EMP001', '', '', '', 20, 20, 0, 1000, 25, '', '', '', '', 'ok', 'APPROVE']);
+      ws.addRow([
+        'StaffID',
+        '...',
+        '...',
+        '...',
+        'DaysWorked',
+        'TotalDays',
+        'DaysAbsent',
+        'BaseFee',
+        'OtherDeduction',
+        '...',
+        '...',
+        '...',
+        '...',
+        'ReviewNotes',
+        'HRDecision',
+      ]);
+      ws.addRow([
+        'EMP001',
+        '',
+        '',
+        '',
+        20,
+        20,
+        0,
+        1000,
+        25,
+        '',
+        '',
+        '',
+        '',
+        'ok',
+        'APPROVE',
+      ]);
 
       const buffer = Buffer.from(await wb.xlsx.writeBuffer());
 
-      const result = await service.importReviewWorkbook('batch-1', buffer, { actorType: 'HR', actorHrOfficerId: 'hr-1' });
+      const result = await service.importReviewWorkbook('batch-1', buffer, {
+        actorType: 'HR',
+        actorHrOfficerId: 'hr-1',
+      });
 
       expect(result.approved).toBe(1);
       expect(result.rejected).toBe(0);
       expect(result.held).toBe(0);
       expect(result.diff.length).toBe(1);
       expect(prisma.payslip.updateMany).toHaveBeenCalled();
-      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'PAYSLIP_REVIEW_WORKBOOK_IMPORTED' }));
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYSLIP_REVIEW_WORKBOOK_IMPORTED' }),
+      );
     });
   });
 });

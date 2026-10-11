@@ -34,9 +34,17 @@ describe('PayslipCatalogController', () => {
   });
 
   it('delegates createCompany', async () => {
-    const user = { id: 'admin-1', role: HrOfficerRole.ADMIN, email: 'admin@test.com' };
+    const user = {
+      id: 'admin-1',
+      role: HrOfficerRole.ADMIN,
+      email: 'admin@test.com',
+      fullName: 'Admin',
+    };
     await controller.createCompany({ name: 'Alpha', code: 'ALPHA' }, user);
-    expect(service.createCompany).toHaveBeenCalledWith({ name: 'Alpha', code: 'ALPHA' }, user);
+    expect(service.createCompany).toHaveBeenCalledWith(
+      { name: 'Alpha', code: 'ALPHA' },
+      user,
+    );
   });
 
   it('delegates listPeriods', async () => {
@@ -45,7 +53,12 @@ describe('PayslipCatalogController', () => {
   });
 
   it('delegates createPeriod', async () => {
-    const user = { id: 'admin-1', role: HrOfficerRole.ADMIN, email: 'admin@test.com' };
+    const user = {
+      id: 'admin-1',
+      role: HrOfficerRole.ADMIN,
+      email: 'admin@test.com',
+      fullName: 'Admin',
+    };
     const dto = {
       accountingCompanyId: 'c1',
       name: 'Oct 2026',
@@ -57,19 +70,39 @@ describe('PayslipCatalogController', () => {
   });
 
   it('delegates getPeriodClaim', async () => {
-    const user = { id: 'u1', role: HrOfficerRole.OFFICER, email: 'u1@test.com' };
+    const user = {
+      id: 'u1',
+      role: HrOfficerRole.OFFICER,
+      email: 'u1@test.com',
+      fullName: 'Officer',
+    };
     await controller.getPeriodClaim('c1', 'p1', user);
     expect(service.getPeriodClaim).toHaveBeenCalledWith('c1', 'p1', 'u1');
   });
 
   it('delegates reassignClaim', async () => {
-    const user = { id: 'admin-1', role: HrOfficerRole.ADMIN, email: 'admin@test.com' };
+    const user = {
+      id: 'admin-1',
+      role: HrOfficerRole.ADMIN,
+      email: 'admin@test.com',
+      fullName: 'Admin',
+    };
     await controller.reassignClaim('c1', 'p1', { officerId: 'u2' }, user);
-    expect(service.reassignClaim).toHaveBeenCalledWith('c1', 'p1', { officerId: 'u2' }, user);
+    expect(service.reassignClaim).toHaveBeenCalledWith(
+      'c1',
+      'p1',
+      { officerId: 'u2' },
+      user,
+    );
   });
 
   it('delegates getMyClaims', async () => {
-    const user = { id: 'u1', role: HrOfficerRole.OFFICER, email: 'u1@test.com' };
+    const user = {
+      id: 'u1',
+      role: HrOfficerRole.OFFICER,
+      email: 'u1@test.com',
+      fullName: 'Officer',
+    };
     await controller.getMyClaims(user);
     expect(service.getMyClaims).toHaveBeenCalledWith(user);
   });

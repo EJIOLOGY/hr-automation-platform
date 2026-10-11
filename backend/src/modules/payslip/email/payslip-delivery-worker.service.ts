@@ -44,10 +44,14 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
       });
 
       if (result.count > 0) {
-        this.logger.warn(`Recovered ${result.count} stuck PROCESSING deliveries back to PENDING.`);
+        this.logger.warn(
+          `Recovered ${result.count} stuck PROCESSING deliveries back to PENDING.`,
+        );
       }
     } catch (err: any) {
-      this.logger.error(`Error recovering stuck PROCESSING deliveries: ${err?.message}`);
+      this.logger.error(
+        `Error recovering stuck PROCESSING deliveries: ${err?.message}`,
+      );
     }
   }
 
@@ -69,14 +73,19 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
       const eligibleDeliveries = await this.prisma.payslipDelivery.findMany({
         where: {
           status: {
-            in: [PayslipDeliveryStatus.PENDING, PayslipDeliveryStatus.RETRY_SCHEDULED],
+            in: [
+              PayslipDeliveryStatus.PENDING,
+              PayslipDeliveryStatus.RETRY_SCHEDULED,
+            ],
           },
-          OR: [
-            { nextAttemptAt: null },
-            { nextAttemptAt: { lte: now } },
-          ],
+          OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
           dispatch: {
-            status: { in: [PayslipEmailDispatchStatus.APPROVED, PayslipEmailDispatchStatus.SENDING] },
+            status: {
+              in: [
+                PayslipEmailDispatchStatus.APPROVED,
+                PayslipEmailDispatchStatus.SENDING,
+              ],
+            },
           },
         },
         take: limit,
@@ -94,7 +103,9 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
       }
 
       // Mark their dispatches as SENDING if they were APPROVED
-      const dispatchIds = Array.from(new Set(eligibleDeliveries.map((d) => d.dispatchId).filter(Boolean))) as string[];
+      const dispatchIds = Array.from(
+        new Set(eligibleDeliveries.map((d) => d.dispatchId).filter(Boolean)),
+      ) as string[];
       if (dispatchIds.length > 0) {
         await this.prisma.payslipEmailDispatch.updateMany({
           where: {
@@ -142,7 +153,10 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
             select: { autoRetryCount: true, status: true },
           });
 
-          if (currentDelivery && currentDelivery.status !== PayslipDeliveryStatus.SKIPPED) {
+          if (
+            currentDelivery &&
+            currentDelivery.status !== PayslipDeliveryStatus.SKIPPED
+          ) {
             const nextRetryIndex = currentDelivery.autoRetryCount;
             if (nextRetryIndex < MAX_AUTO_RETRIES) {
               const delay = RETRY_BACKOFF_MS[nextRetryIndex] || 15 * 60 * 1000;
@@ -200,13 +214,12 @@ export class PayslipDeliveryWorkerService implements OnModuleInit {
       return;
     }
 
-    const hasFailures = counts.some((c) =>
-      [
-        PayslipDeliveryStatus.FAILED,
-        PayslipDeliveryStatus.BOUNCED_HARD,
-        PayslipDeliveryStatus.REJECTED,
-      ].includes(c.status),
-    );
+    const failureStatuses: PayslipDeliveryStatus[] = [
+      PayslipDeliveryStatus.FAILED,
+      PayslipDeliveryStatus.BOUNCED_HARD,
+      PayslipDeliveryStatus.REJECTED,
+    ];
+    const hasFailures = counts.some((c) => failureStatuses.includes(c.status));
 
     await this.prisma.payslipEmailDispatch.update({
       where: { id: dispatchId },

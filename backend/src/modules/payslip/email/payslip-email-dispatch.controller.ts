@@ -11,7 +11,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { CurrentUser, AuthenticatedUser } from '../../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  type AuthenticatedUser,
+} from '../../auth/decorators/current-user.decorator';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { PayslipAuthorizationService } from '../payslip-authorization.service';
@@ -20,6 +23,7 @@ import { PayslipDeliveryWorkerService } from './payslip-delivery-worker.service'
 import { payslipError } from '../shared/payslip-error-codes';
 import {
   EmailSuppressionStatus,
+  Prisma,
   HrOfficerRole,
   PayslipDeliveryAttemptTrigger,
   PayslipDeliveryStatus,
@@ -90,7 +94,11 @@ export class PayslipEmailDispatchController {
     });
 
     if (payslips.length === 0) {
-      throw payslipError(HttpStatus.BAD_REQUEST, 'NOTHING_TO_APPROVE', 'No approved payslips found for this batch.');
+      throw payslipError(
+        HttpStatus.BAD_REQUEST,
+        'NOTHING_TO_APPROVE',
+        'No approved payslips found for this batch.',
+      );
     }
 
     // Check suppression list to partition recipients vs skipped
@@ -106,15 +114,22 @@ export class PayslipEmailDispatchController {
       },
       select: { emailNormalized: true },
     });
-    const suppressedSet = new Set(activeSuppressions.map((s) => s.emailNormalized));
+    const suppressedSet = new Set(
+      activeSuppressions.map((s) => s.emailNormalized),
+    );
 
     let recipientCount = 0;
     let skippedCount = 0;
 
-    const deliveryInputs = [];
+    const deliveryInputs: Omit<
+      Prisma.PayslipDeliveryCreateManyInput,
+      'dispatchId'
+    >[] = [];
 
     for (const payslip of payslips) {
-      const email = payslip.employee?.email ? normalizeEmail(payslip.employee.email) : null;
+      const email = payslip.employee?.email
+        ? normalizeEmail(payslip.employee.email)
+        : null;
       const isSuppressed = email ? suppressedSet.has(email) : false;
       const isSkipped = !email || isSuppressed;
 
@@ -131,12 +146,14 @@ export class PayslipEmailDispatchController {
         payrollPeriodId: batchRecord.payrollPeriodId,
         employeeId: payslip.employeeId,
         isTest: mode === PayslipEmailDispatchMode.TEST,
-        status: isSkipped ? PayslipDeliveryStatus.SKIPPED : PayslipDeliveryStatus.PENDING,
+        status: isSkipped
+          ? PayslipDeliveryStatus.SKIPPED
+          : PayslipDeliveryStatus.PENDING,
         skipReason: !email
           ? 'Missing employee email'
           : isSuppressed
-          ? 'Email address is on the active suppression list'
-          : null,
+            ? 'Email address is on the active suppression list'
+            : null,
         recipientEmailSnapshot: email,
         recipientMasked: email ? maskEmail(email) : null,
         contentHash: payslip.contentHash,
@@ -198,7 +215,11 @@ export class PayslipEmailDispatchController {
     await this.authService.assertBatch(batchId, actor);
 
     if (actor.role !== HrOfficerRole.ADMIN) {
-      throw payslipError(HttpStatus.FORBIDDEN, 'ADMIN_REQUIRED', 'Only administrators can approve an email dispatch.');
+      throw payslipError(
+        HttpStatus.FORBIDDEN,
+        'ADMIN_REQUIRED',
+        'Only administrators can approve an email dispatch.',
+      );
     }
 
     const dispatch = await this.prisma.payslipEmailDispatch.findUnique({
@@ -262,8 +283,13 @@ export class PayslipEmailDispatchController {
       throw new NotFoundException('Dispatch not found.');
     }
 
-    if (dispatch.status !== PayslipEmailDispatchStatus.SENDING && dispatch.status !== PayslipEmailDispatchStatus.APPROVED) {
-      throw new BadRequestException(`Cannot pause a dispatch with status ${dispatch.status}.`);
+    if (
+      dispatch.status !== PayslipEmailDispatchStatus.SENDING &&
+      dispatch.status !== PayslipEmailDispatchStatus.APPROVED
+    ) {
+      throw new BadRequestException(
+        `Cannot pause a dispatch with status ${dispatch.status}.`,
+      );
     }
 
     const updated = await this.prisma.payslipEmailDispatch.update({
@@ -307,7 +333,9 @@ export class PayslipEmailDispatchController {
     }
 
     if (dispatch.status !== PayslipEmailDispatchStatus.PAUSED) {
-      throw new BadRequestException(`Cannot resume a dispatch that is not PAUSED (current status: ${dispatch.status}).`);
+      throw new BadRequestException(
+        `Cannot resume a dispatch that is not PAUSED (current status: ${dispatch.status}).`,
+      );
     }
 
     const updated = await this.prisma.payslipEmailDispatch.update({
@@ -356,7 +384,9 @@ export class PayslipEmailDispatchController {
       dispatch.status === PayslipEmailDispatchStatus.COMPLETED_WITH_FAILURES ||
       dispatch.status === PayslipEmailDispatchStatus.CANCELLED
     ) {
-      throw new BadRequestException(`Cannot cancel an already finished dispatch.`);
+      throw new BadRequestException(
+        `Cannot cancel an already finished dispatch.`,
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -371,7 +401,12 @@ export class PayslipEmailDispatchController {
       await tx.payslipDelivery.updateMany({
         where: {
           dispatchId,
-          status: { in: [PayslipDeliveryStatus.PENDING, PayslipDeliveryStatus.RETRY_SCHEDULED] },
+          status: {
+            in: [
+              PayslipDeliveryStatus.PENDING,
+              PayslipDeliveryStatus.RETRY_SCHEDULED,
+            ],
+          },
         },
         data: {
           status: PayslipDeliveryStatus.CANCELLED,
@@ -422,10 +457,13 @@ export class PayslipEmailDispatchController {
       _count: { id: true },
     });
 
-    const statusMap = deliveryCounts.reduce((acc, curr) => {
-      acc[curr.status] = curr._count.id;
-      return acc;
-    }, {} as Record<string, number>);
+    const statusMap = deliveryCounts.reduce(
+      (acc, curr) => {
+        acc[curr.status] = curr._count.id;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return {
       dispatch,
@@ -466,7 +504,11 @@ export class PayslipEmailDispatchController {
       },
     });
 
-    if (updated.count > 0 && [PayslipEmailDispatchStatus.COMPLETED, PayslipEmailDispatchStatus.COMPLETED_WITH_FAILURES].includes(dispatch.status)) {
+    const finishedStatuses: PayslipEmailDispatchStatus[] = [
+      PayslipEmailDispatchStatus.COMPLETED,
+      PayslipEmailDispatchStatus.COMPLETED_WITH_FAILURES,
+    ];
+    if (updated.count > 0 && finishedStatuses.includes(dispatch.status)) {
       await this.prisma.payslipEmailDispatch.update({
         where: { id: dispatchId },
         data: {
