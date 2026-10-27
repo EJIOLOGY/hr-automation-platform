@@ -1,11 +1,20 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { PayslipBatchStatus, PayslipStatus } from '../../../generated/prisma/client';
+import { PayslipBatchStatus, PayslipStatus, type Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { payslipError } from '../shared/payslip-error-codes';
 import { PAYSLIP_AUDIT_ACTOR, payslipAuditMetadata } from '../shared/payslip-audit';
 import { runPayslipTransaction } from '../shared/payslip-transaction';
 import { ReviewDecisionsDto } from './dto/review-decision.dto';
+
+export interface RecordDecisionsOptions {
+  /**
+   * Run every read and write on this already-open transaction instead of opening one. Used by the workbook
+   * apply so input edits and decisions commit (or roll back) together. No audit entry is written in this mode;
+   * the caller audits after its own commit.
+   */
+  tx?: Prisma.TransactionClient;
+}
 
 export interface ReviewDecisionResult {
   batchId: string;
@@ -34,8 +43,10 @@ export class ReviewDecisionService {
     batchId: string,
     dto: ReviewDecisionsDto,
     actor: { id: string },
+    options: RecordDecisionsOptions = {},
   ): Promise<ReviewDecisionResult> {
-    const batch = await this.prisma.payslipBatch.findUnique({
+    const db = (options.tx ?? this.prisma) as Prisma.TransactionClient;
+    const batch = await db.payslipBatch.findUnique({
       where: { id: batchId },
       include: {
         payrollPeriod: true,
@@ -47,7 +58,7 @@ export class ReviewDecisionService {
     }
 
     // Latest version check (D-LATEST)
-    const latestBatch = await this.prisma.payslipBatch.findFirst({
+    const latestBatch = await db.payslipBatch.findFirst({
       where: {
         accountingCompanyId: batch.accountingCompanyId,
         payrollPeriodId: batch.payrollPeriodId,
@@ -110,7 +121,7 @@ export class ReviewDecisionService {
 
     // Fetch all payslips belonging to this batch
     const payslipIds = Array.from(seenIds);
-    const existingPayslips = await this.prisma.payslip.findMany({
+    const existingPayslips = await db.payslip.findMany({
       where: {
         id: { in: payslipIds },
         payslipBatchId: batchId,
@@ -204,7 +215,7 @@ export class ReviewDecisionService {
       }
     }
 
-    const result = await runPayslipTransaction(this.prisma, 'BULK', async (tx) => {
+    const execute = async (tx: Prisma.TransactionClient): Promise<ReviewDecisionResult> => {
       // 1. Apply REVIEWED updates
       if (toReviewed.length > 0) {
         await tx.payslip.updateMany({
@@ -297,7 +308,12 @@ export class ReviewDecisionService {
         },
         statusCounts,
       };
-    });
+    };
+
+    if (options.tx) {
+      return execute(options.tx);
+    }
+    const result = await runPayslipTransaction(this.prisma, 'BULK', execute);
 
     // Audit PAYSLIP_REVIEW_DECISIONS_RECORDED (ids and counts only)
     await this.audit.log({

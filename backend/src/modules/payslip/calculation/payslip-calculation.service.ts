@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
 import { runPayslipTransaction } from '../shared/payslip-transaction';
+import { loadAllowanceDefinitions } from './allowance-metadata';
 import { AuditService } from '../../audit/audit.service';
 import {
   PayslipBatchStatus,
@@ -12,11 +13,7 @@ import {
   Prisma,
   BillingRateUploadStatus,
 } from '../../../generated/prisma/client';
-import {
-  AllowanceMetadata,
-  CANONICAL_ALLOWANCES,
-  calculatePayslip,
-} from './calculation-engine';
+import { calculatePayslip } from './calculation-engine';
 import { CalculationInputs } from './calculation.types';
 
 export interface CalculationActor {
@@ -57,25 +54,8 @@ export class PayslipCalculationService {
       );
     }
 
-    // Load active allowance definitions from database (fallback to CANONICAL_ALLOWANCES)
-    const dbDefinitions = await this.prisma.allowanceDefinition.findMany();
-    const definitionsMap: Record<string, AllowanceMetadata> = {
-      ...CANONICAL_ALLOWANCES,
-    };
-
-    for (const def of dbDefinitions) {
-      definitionsMap[def.canonicalName] = {
-        canonicalName: def.canonicalName,
-        displayLabel: def.displayLabel,
-        classification: def.classification,
-        affectsGrossEarnings: def.affectsGrossEarnings,
-        affectsNetServiceFee: def.affectsNetServiceFee,
-        supportsArrears: def.supportsArrears,
-        sortOrder: def.sortOrder,
-        parentCanonicalName:
-          CANONICAL_ALLOWANCES[def.canonicalName]?.parentCanonicalName,
-      };
-    }
+    // Allowance definitions: canonical set overlaid with the database definitions.
+    const { meta: definitionsMap, idByCanonicalName } = await loadAllowanceDefinitions(this.prisma);
 
     return runPayslipTransaction(this.prisma, 'CALC', async (tx) => {
       // Find latest batch version for this company and period
@@ -198,13 +178,10 @@ export class PayslipCalculationService {
         const createdBaseLineIds = new Map<string, string>();
 
         for (const line of baseLines) {
-          const matchingDef = dbDefinitions.find(
-            (d) => d.canonicalName === line.canonicalName,
-          );
           const created = await tx.payslipLine.create({
             data: {
               payslipId: payslip.id,
-              allowanceDefinitionId: matchingDef?.id ?? null,
+              allowanceDefinitionId: idByCanonicalName.get(line.canonicalName) ?? null,
               name: line.name,
               kind: line.kind,
               amount: line.amount,
@@ -219,9 +196,6 @@ export class PayslipCalculationService {
         // Insert ARREARS lines with parentLineId
         const arrearsLines = outputs.lines.filter((l) => l.kind === 'ARREARS');
         for (const line of arrearsLines) {
-          const matchingDef = dbDefinitions.find(
-            (d) => d.canonicalName === line.canonicalName,
-          );
           const parentLineId = line.parentCanonicalName
             ? (createdBaseLineIds.get(line.parentCanonicalName) ?? null)
             : null;
@@ -229,7 +203,7 @@ export class PayslipCalculationService {
           await tx.payslipLine.create({
             data: {
               payslipId: payslip.id,
-              allowanceDefinitionId: matchingDef?.id ?? null,
+              allowanceDefinitionId: idByCanonicalName.get(line.canonicalName) ?? null,
               name: line.name,
               kind: line.kind,
               parentLineId,

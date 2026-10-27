@@ -17,6 +17,7 @@ import {
   PayslipStatus,
 } from '../../../generated/prisma/client';
 import { maskEmail, normalizeEmail } from '../../employee/email-utils';
+import { SKIP_REASON_SUPPRESSED } from './delivery-skip-reasons';
 
 export type SendOutcome =
   | { kind: 'ACCEPTED'; sesMessageId: string }
@@ -359,8 +360,9 @@ export class PayslipEmailSenderService {
       await this.prisma.payslipDelivery.update({
         where: { id: deliveryId },
         data: {
-          status: isSuppressed ? PayslipDeliveryStatus.FAILED : PayslipDeliveryStatus.SKIPPED,
-          skipReason: errorMessage,
+          status: PayslipDeliveryStatus.SKIPPED,
+          // A suppressed recipient is skipped on purpose (not a failure); the human-readable cause is in lastErrorMessage.
+          skipReason: isSuppressed ? SKIP_REASON_SUPPRESSED : errorMessage,
           lastErrorCode: errorCode,
           lastErrorMessage: errorMessage,
         },

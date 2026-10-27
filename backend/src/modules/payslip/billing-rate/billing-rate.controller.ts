@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Controller,
   Post,
   Query,
@@ -17,33 +16,19 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { BillingRateService } from './billing-rate.service';
 import { PayslipAuthorizationService } from '../payslip-authorization.service';
+import { assertXlsxUpload, xlsxUploadOptions } from '../shared/xlsx-upload';
 
 @Controller('payslip/billing-rate')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(HrOfficerRole.ADMIN, HrOfficerRole.OFFICER)
 export class BillingRateController {
-  constructor(private readonly billingRateService: BillingRateService, private readonly authorization: PayslipAuthorizationService) {}
+  constructor(
+    private readonly billingRateService: BillingRateService,
+    private readonly authorization: PayslipAuthorizationService,
+  ) {}
 
   @Post('import')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: 10 * 1024 * 1024 },
-      fileFilter: (_request, file, callback) => {
-        const accepted =
-          file.originalname.toLowerCase().endsWith('.xlsx') ||
-          file.mimetype ===
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        callback(
-          accepted
-            ? null
-            : new BadRequestException(
-                'Only .xlsx Billing Rate files are supported.',
-              ),
-          accepted,
-        );
-      },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', xlsxUploadOptions))
   async importBillingRate(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Query('accountingCompanyId', new ParseUUIDPipe())
@@ -51,9 +36,12 @@ export class BillingRateController {
     @Query('payrollPeriodId', new ParseUUIDPipe()) payrollPeriodId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (!file)
-      throw new BadRequestException('Billing Rate .xlsx file is required.');
-    await this.authorization.assertCompanyPeriod(accountingCompanyId, payrollPeriodId, user);
+    await this.authorization.assertCompanyPeriod(
+      accountingCompanyId,
+      payrollPeriodId,
+      user,
+    );
+    assertXlsxUpload(file);
 
     return this.billingRateService.importWorkbook(
       file.buffer,

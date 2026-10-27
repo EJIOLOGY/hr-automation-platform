@@ -1,7 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../core/prisma/prisma.service';
-import { BillingRateUploadStatus, PayslipBatchStatus, PayslipStatus } from '../../../generated/prisma/client';
-import { derivePayRunState, PayRunState, PayslipCountsInput } from './pay-run-state';
+import {
+  BillingRateUploadStatus,
+  PayslipBatchStatus,
+  PayslipStatus,
+} from '../../../generated/prisma/client';
+import {
+  derivePayRunState,
+  PayRunState,
+  PayslipCountsInput,
+} from './pay-run-state';
 
 export interface PayRunStateResponse {
   companyId: string;
@@ -24,15 +32,33 @@ export interface PayRunStateResponse {
 export class PayRunService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPayRunState(companyId: string, periodId: string): Promise<PayRunStateResponse> {
-    // Verify company and period exist
+  async getPayRunState(
+    companyId: string,
+    periodId: string,
+  ): Promise<PayRunStateResponse> {
+    // The company must exist and the period must belong to THAT company (a period id alone proves nothing).
     const [company, period] = await Promise.all([
-      this.prisma.accountingCompany.findUnique({ where: { id: companyId }, select: { id: true } }),
-      this.prisma.payrollPeriod.findUnique({ where: { id: periodId }, select: { id: true } }),
+      this.prisma.accountingCompany.findUnique({
+        where: { id: companyId },
+        select: { id: true },
+      }),
+      this.prisma.payrollPeriod.findUnique({
+        where: { id: periodId },
+        select: { id: true, accountingCompanyId: true },
+      }),
     ]);
 
-    if (!company) throw new NotFoundException(`Company ${companyId} not found.`);
-    if (!period) throw new NotFoundException(`Period ${periodId} not found.`);
+    if (!company)
+      throw new NotFoundException(`Company ${companyId} not found.`);
+    if (!period)
+      throw new NotFoundException(
+        'Payroll period not found for this accounting company.',
+      );
+    if (period.accountingCompanyId !== companyId) {
+      throw new NotFoundException(
+        'Payroll period does not belong to the accounting company.',
+      );
+    }
 
     // Latest billing rate upload for this company+period
     const latestUploadRaw = await this.prisma.billingRateUpload.findFirst({
@@ -74,9 +100,16 @@ export class PayRunService {
         _count: true,
       });
 
-      const zero: PayslipCountsInput = { total: 0, CALCULATED: 0, IN_REVIEW: 0, HELD: 0, REJECTED: 0, APPROVED: 0 };
+      const zero: PayslipCountsInput = {
+        total: 0,
+        CALCULATED: 0,
+        IN_REVIEW: 0,
+        HELD: 0,
+        REJECTED: 0,
+        APPROVED: 0,
+      };
       for (const row of countsRaw) {
-        const st = row.status as keyof Omit<PayslipCountsInput, 'total'>;
+        const st = row.status;
         if (st in zero) {
           zero[st] = row._count;
           zero.total += row._count;
@@ -86,20 +119,39 @@ export class PayRunService {
     }
 
     const latestUpload = latestUploadRaw
-      ? { id: latestUploadRaw.id, version: latestUploadRaw.version, status: latestUploadRaw.status }
+      ? {
+          id: latestUploadRaw.id,
+          version: latestUploadRaw.version,
+          status: latestUploadRaw.status,
+        }
       : null;
 
     const latestBatch = latestBatchRaw
-      ? { id: latestBatchRaw.id, version: latestBatchRaw.version, status: latestBatchRaw.status, earlierVersionHasApprovedPayslips }
+      ? {
+          id: latestBatchRaw.id,
+          version: latestBatchRaw.version,
+          status: latestBatchRaw.status,
+          earlierVersionHasApprovedPayslips,
+        }
       : null;
 
-    const state = derivePayRunState({ latestUpload, latestBatch, counts: countsInput });
+    const state = derivePayRunState({
+      latestUpload,
+      latestBatch,
+      counts: countsInput,
+    });
 
     return {
       companyId,
       periodId,
       state,
-      latestBatch: latestBatch ? { id: latestBatch.id, version: latestBatch.version, status: latestBatch.status } : null,
+      latestBatch: latestBatch
+        ? {
+            id: latestBatch.id,
+            version: latestBatch.version,
+            status: latestBatch.status,
+          }
+        : null,
       latestUpload,
       counts: countsInput,
     };

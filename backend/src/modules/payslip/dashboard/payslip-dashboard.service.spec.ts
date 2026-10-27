@@ -23,10 +23,12 @@ describe('PayslipDashboardService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn(),
       },
       payslipLine: {
         deleteMany: jest.fn(),
-        create: jest.fn(),
+        createMany: jest.fn(),
       },
       allowanceDefinition: {
         findMany: jest.fn(),
@@ -98,7 +100,7 @@ describe('PayslipDashboardService', () => {
       prisma.payslip.findUnique.mockResolvedValue(payslip);
       prisma.payslipBatch.findFirst.mockResolvedValue({ id: 'batch-1', version: 1 });
       prisma.allowanceDefinition.findMany.mockResolvedValue([]);
-      prisma.payslip.update.mockResolvedValue({ id: 'p1', status: PayslipStatus.CALCULATED });
+      prisma.payslip.findUniqueOrThrow.mockResolvedValue({ id: 'p1', status: PayslipStatus.CALCULATED });
 
       const result = (await service.correctSinglePayslip(
         'p1',
@@ -108,8 +110,9 @@ describe('PayslipDashboardService', () => {
 
       expect(result.id).toBe('p1');
       expect(prisma.payslipLine.deleteMany).toHaveBeenCalled();
-      expect(prisma.payslip.update).toHaveBeenCalledWith(
+      expect(prisma.payslip.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: expect.objectContaining({ id: 'p1' }),
           data: expect.objectContaining({
             status: PayslipStatus.CALCULATED,
             changedSinceReview: true,
@@ -117,6 +120,50 @@ describe('PayslipDashboardService', () => {
         }),
       );
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'PAYSLIP_CORRECTED' }));
+    });
+
+    it('409 PAYSLIP_CHANGED_CONCURRENTLY when the row changed since it was read', async () => {
+      prisma.payslip.findUnique.mockResolvedValue({
+        id: 'p1',
+        payslipBatchId: 'batch-1',
+        status: PayslipStatus.IN_REVIEW,
+        updatedAt: new Date(),
+        calculationInputs: { baseFee: 1000, daysWorked: 10, totalDays: 20 },
+        lines: [],
+        payslipBatch: { id: 'batch-1', accountingCompanyId: 'comp-1', payrollPeriodId: 'period-1' },
+      });
+      prisma.payslipBatch.findFirst.mockResolvedValue({ id: 'batch-1', version: 1 });
+      prisma.allowanceDefinition.findMany.mockResolvedValue([]);
+      prisma.payslip.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.correctSinglePayslip('p1', { daysWorked: 15 }, { actorType: 'HR_OFFICER', actorHrOfficerId: 'hr-1' }),
+      ).rejects.toMatchObject({ response: { code: 'PAYSLIP_CHANGED_CONCURRENTLY' } });
+      expect(prisma.payslipLine.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('an omitted override (undefined) never wipes a stored input, and allowances merge key by key', async () => {
+      prisma.payslip.findUnique.mockResolvedValue({
+        id: 'p1',
+        payslipBatchId: 'batch-1',
+        status: PayslipStatus.CALCULATED,
+        updatedAt: new Date(),
+        calculationInputs: { baseFee: 1000, daysWorked: 10, totalDays: 20, allowances: { A: 1, B: 2 } },
+        lines: [],
+        payslipBatch: { id: 'batch-1', accountingCompanyId: 'comp-1', payrollPeriodId: 'period-1' },
+      });
+      prisma.payslipBatch.findFirst.mockResolvedValue({ id: 'batch-1', version: 1 });
+      prisma.allowanceDefinition.findMany.mockResolvedValue([]);
+      prisma.payslip.findUniqueOrThrow.mockResolvedValue({ id: 'p1' });
+
+      await service.correctSinglePayslip(
+        'p1',
+        { baseFee: undefined, daysWorked: 12, allowances: { B: 5 } },
+        { actorType: 'HR_OFFICER', actorHrOfficerId: 'hr-1' },
+      );
+
+      const data = prisma.payslip.updateMany.mock.calls[0][0].data;
+      expect(data.calculationInputs).toMatchObject({ baseFee: 1000, daysWorked: 12, allowances: { A: 1, B: 5 } });
     });
 
     it('delegates to PayslipCorrectionService when payslip is APPROVED', async () => {

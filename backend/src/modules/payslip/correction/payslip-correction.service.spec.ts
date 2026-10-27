@@ -174,7 +174,8 @@ describe('PayslipCorrectionService', () => {
           .mockResolvedValueOnce({ id: 'new-p2' }),
       },
       payslipLine: {
-        create: jest.fn(),
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
       },
     };
     prisma.$transaction.mockImplementation((fn: any) => fn(txMock));

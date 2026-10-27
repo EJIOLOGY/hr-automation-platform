@@ -13,6 +13,7 @@ import {
   PayslipEmailDispatchStatus,
 } from '../../../generated/prisma/client';
 import { runPayslipTransaction } from '../shared/payslip-transaction';
+import { SKIP_REASON_SUPPRESSED } from './delivery-skip-reasons';
 
 const MAX_AUTO_RETRIES = 3;
 // Backoff delays: attempt 1 -> 60s, attempt 2 -> 300s (5m), attempt 3 -> 900s (15m)
@@ -286,16 +287,24 @@ export class PayslipDeliveryWorkerService
         break;
 
       case 'SUPPRESSED':
+        // Deliberately not sent: SKIPPED (not FAILED), so it never counts as a delivery failure or a retry candidate.
         await this.prisma.payslipDelivery.update({
           where: { id: deliveryId },
           data: {
-            status: PayslipDeliveryStatus.FAILED,
-            skipReason: 'SUPPRESSED',
+            status: PayslipDeliveryStatus.SKIPPED,
+            skipReason: SKIP_REASON_SUPPRESSED,
             nextAttemptAt: null,
             claimedAt: null,
             claimedBy: null,
           },
         });
+        if (dispatchId) {
+          // Move it from the recipient count to the skipped count so the dispatch totals stay truthful.
+          await this.prisma.payslipEmailDispatch.updateMany({
+            where: { id: dispatchId, recipientCount: { gt: 0 } },
+            data: { recipientCount: { decrement: 1 }, skippedCount: { increment: 1 } },
+          });
+        }
         break;
 
       case 'UNKNOWN':

@@ -21,6 +21,7 @@ describe('PayslipDeliveryWorkerService', () => {
       },
       payslipEmailDispatch: {
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       $queryRawUnsafe: jest.fn(),
       $executeRawUnsafe: jest.fn(),
@@ -102,7 +103,7 @@ describe('PayslipDeliveryWorkerService', () => {
       );
     });
 
-    it('marks FAILED on SUPPRESSED outcome without retry', async () => {
+    it('marks a SUPPRESSED outcome SKIPPED (not FAILED), without retry, and moves it to the skipped count', async () => {
       prisma.payslipDelivery.findUnique.mockResolvedValue({ autoRetryCount: 0 });
 
       await worker.applyOutcome('del-1', 'disp-1', { kind: 'SUPPRESSED', code: 'SUPPRESSED_ADDRESS' });
@@ -111,10 +112,23 @@ describe('PayslipDeliveryWorkerService', () => {
         expect.objectContaining({
           where: { id: 'del-1' },
           data: expect.objectContaining({
-            status: PayslipDeliveryStatus.FAILED,
+            status: PayslipDeliveryStatus.SKIPPED,
+            skipReason: 'SUPPRESSED',
             nextAttemptAt: null,
           }),
         }),
+      );
+      expect(prisma.payslipEmailDispatch.updateMany).toHaveBeenCalledWith({
+        where: { id: 'disp-1', recipientCount: { gt: 0 } },
+        data: { recipientCount: { decrement: 1 }, skippedCount: { increment: 1 } },
+      });
+    });
+
+    it('a suppressed-only dispatch completes WITHOUT failures', async () => {
+      prisma.payslipDelivery.groupBy.mockResolvedValue([{ status: PayslipDeliveryStatus.SKIPPED, _count: { id: 2 } }]);
+      await worker.updateDispatchStatusIfFinished('disp-1');
+      expect(prisma.payslipEmailDispatch.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
       );
     });
 

@@ -13,7 +13,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { HrOfficerRole } from '../../../generated/prisma/enums';
-import { CurrentUser, type AuthenticatedUser } from '../../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  type AuthenticatedUser,
+} from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -23,6 +26,7 @@ import { ReviewDecisionService } from './review-decision.service';
 import { ReviewDecisionsDto } from './dto/review-decision.dto';
 import { ApplyWorkbookDto } from './dto/apply-workbook.dto';
 import { PayslipAuthorizationService } from '../payslip-authorization.service';
+import { assertXlsxUpload, xlsxUploadOptions } from '../shared/xlsx-upload';
 
 @Controller('payslip')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -57,7 +61,8 @@ export class ReviewWorkbookController {
       actorHrOfficerId: user.id,
     });
     res.set({
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="review-${batchId}.xlsx"`,
       'Content-Length': buf.length.toString(),
     });
@@ -67,17 +72,18 @@ export class ReviewWorkbookController {
   /**
    * POST /payslip/batches/:batchId/review-workbook/preview
    *
-   * Parses and validates the uploaded workbook, creates a 10-minute preview,
-   * and returns the diff for confirmation before applying.
+   * Validates the uploaded workbook against the batch it was exported from, recalculates edited payslips in
+   * memory, and returns every problem or the full diff. Creates a 30-minute preview only when it is applicable.
    */
   @Post('batches/:batchId/review-workbook/preview')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', xlsxUploadOptions))
   async previewWorkbook(
     @Param('batchId', new ParseUUIDPipe()) batchId: string,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.authorization.assertBatch(batchId, user);
+    assertXlsxUpload(file);
     return this.previewService.previewWorkbook(batchId, file.buffer, {
       actorType: 'HR_OFFICER',
       actorHrOfficerId: user.id,
@@ -87,8 +93,8 @@ export class ReviewWorkbookController {
   /**
    * POST /payslip/batches/:batchId/review-workbook/apply
    *
-   * Applies a previously created preview.  Validates expiry and batch-state
-   * integrity before delegating decisions to ReviewDecisionService.
+   * Applies a previously created preview in one transaction (edits recalculated and persisted, then decisions).
+   * Idempotent: applying the same preview twice returns the first result.
    */
   @Post('batches/:batchId/review-workbook/apply')
   async applyWorkbook(
@@ -103,4 +109,3 @@ export class ReviewWorkbookController {
     });
   }
 }
-
